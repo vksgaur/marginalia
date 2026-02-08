@@ -39,7 +39,16 @@ export function AddArticleForm() {
         body: JSON.stringify({ url: url.trim() }),
       });
 
-      const data = await response.json();
+      // Handle non-JSON or empty responses safely
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(
+          'Server returned an invalid response. The article may be too large or the site may be blocking requests.'
+        );
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to parse article');

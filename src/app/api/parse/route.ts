@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { JSDOM } from 'jsdom';
+import { parseHTML } from 'linkedom';
 import { Readability } from '@mozilla/readability';
 import { WORDS_PER_MINUTE } from '@/lib/constants';
 
+export const maxDuration = 30; // Allow up to 30s on Vercel
+
 export async function POST(request: NextRequest) {
   try {
-    const { url } = await request.json();
+    const body = await request.json();
+    const url = body?.url;
 
     if (!url || typeof url !== 'string') {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 });
@@ -29,15 +32,17 @@ export async function POST(request: NextRequest) {
         signal: controller.signal,
         headers: {
           'User-Agent':
-            'Mozilla/5.0 (compatible; Marginalia/1.0; +https://marginalia.app)',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
       });
     } catch (err) {
       clearTimeout(timeout);
-      const message = err instanceof Error && err.name === 'AbortError'
-        ? 'Request timed out'
-        : 'Failed to fetch the URL';
+      const message =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'Request timed out. The site may be slow or blocking requests.'
+          : 'Failed to fetch the URL. Please check the link and try again.';
       return NextResponse.json({ error: message }, { status: 502 });
     }
     clearTimeout(timeout);
@@ -51,29 +56,44 @@ export async function POST(request: NextRequest) {
 
     const html = await response.text();
 
-    // Parse with JSDOM + Readability
-    const dom = new JSDOM(html, { url: parsedUrl.toString() });
-    const doc = dom.window.document;
+    if (!html || html.length < 100) {
+      return NextResponse.json(
+        { error: 'The page returned very little content. It may require JavaScript to load.' },
+        { status: 422 }
+      );
+    }
 
-    // Extract Open Graph metadata
+    // Parse with linkedom (lightweight, serverless-compatible)
+    const { document } = parseHTML(html);
+
+    // Set documentURI for Readability (it needs this for relative URL resolution)
+    Object.defineProperty(document, 'documentURI', {
+      value: parsedUrl.toString(),
+      writable: false,
+    });
+
+    // Extract Open Graph metadata before Readability mutates the DOM
     const ogTitle =
-      doc.querySelector('meta[property="og:title"]')?.getAttribute('content') || '';
+      document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '';
     const ogDescription =
-      doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
+      document.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
+      document.querySelector('meta[name="description"]')?.getAttribute('content') ||
       '';
     const ogImage =
-      doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || '';
+      document.querySelector('meta[property="og:image"]')?.getAttribute('content') || '';
     const ogSiteName =
-      doc.querySelector('meta[property="og:site_name"]')?.getAttribute('content') || '';
+      document.querySelector('meta[property="og:site_name"]')?.getAttribute('content') || '';
 
     // Parse readable content
-    const reader = new Readability(doc);
+    const reader = new Readability(document as unknown as Document);
     const article = reader.parse();
 
-    if (!article) {
+    if (!article || !article.content) {
       return NextResponse.json(
-        { error: 'Could not extract article content. Try pasting the text manually.' },
+        {
+          error:
+            'Could not extract article content from this page. The site may be behind a paywall or require JavaScript.',
+        },
         { status: 422 }
       );
     }
@@ -84,10 +104,11 @@ export async function POST(request: NextRequest) {
     const readingTime = Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE));
 
     // Build excerpt
-    const excerpt = (article.excerpt || ogDescription || textContent.slice(0, 200)).slice(
-      0,
-      200
-    );
+    const excerpt = (
+      article.excerpt ||
+      ogDescription ||
+      textContent.slice(0, 200)
+    ).slice(0, 200);
 
     // Resolve relative image URL
     let thumbnail = ogImage;
@@ -101,7 +122,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       title: article.title || ogTitle || parsedUrl.hostname,
-      content: article.content || '',
+      content: article.content,
       excerpt: excerpt.trim(),
       thumbnail,
       siteName: ogSiteName || article.siteName || parsedUrl.hostname,
