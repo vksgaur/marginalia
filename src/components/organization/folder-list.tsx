@@ -14,9 +14,10 @@ interface FolderListProps {
   folderCounts: Map<string, number>;
   currentFolderId: string | null;
   onSelectFolder: (id: string | null) => void;
+  userId: string | null;
 }
 
-export function FolderList({ folders, folderCounts, currentFolderId, onSelectFolder }: FolderListProps) {
+export function FolderList({ folders, folderCounts, currentFolderId, onSelectFolder, userId }: FolderListProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [selectedColor, setSelectedColor] = useState(FOLDER_COLORS[0]);
@@ -26,7 +27,7 @@ export function FolderList({ folders, folderCounts, currentFolderId, onSelectFol
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
-    await addFolder(newName.trim(), selectedColor);
+    await addFolder(newName.trim(), selectedColor, userId);
     setNewName('');
     setIsAdding(false);
   };

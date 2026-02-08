@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useAllTags } from '@/lib/hooks/use-articles';
+import { useAuth } from '@/components/shared/auth-provider';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { X } from 'lucide-react';
@@ -13,9 +14,10 @@ interface TagInputProps {
 }
 
 export function TagInput({ tags, onChange, placeholder = 'Add tags...' }: TagInputProps) {
+  const { user } = useAuth();
   const [input, setInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const allTags = useAllTags();
+  const allTags = useAllTags(user?.uid || null);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 

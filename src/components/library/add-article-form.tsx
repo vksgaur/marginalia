@@ -13,17 +13,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/components/shared/auth-provider';
 import { Plus, Loader2, ChevronDown, FolderOpen } from 'lucide-react';
 import type { ParsedArticle } from '@/lib/types';
 
 export function AddArticleForm() {
+  const { user } = useAuth();
+  const userId = user?.uid || null;
+
   const [url, setUrl] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const { toast } = useToast();
-  const folders = useFolders();
+  const folders = useFolders(userId);
 
   const selectedFolder = folders?.find((f) => f.id === folderId);
 
@@ -66,6 +70,7 @@ export function AddArticleForm() {
         readingTime: parsed.readingTime,
         tags,
         folderId,
+        userId,
       });
 
       toast('Article saved!');

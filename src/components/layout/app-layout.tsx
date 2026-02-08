@@ -8,16 +8,30 @@ import { KeyboardShortcuts } from '@/components/shared/keyboard-shortcuts';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const isSidebarOpen = useAppStore((s) => s.isSidebarOpen);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
 
   return (
     <ToastProvider>
       <KeyboardShortcuts />
       <div className="flex h-screen overflow-hidden bg-background">
-        {/* Sidebar */}
+        {/* Mobile overlay backdrop */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar — overlay on mobile, inline on desktop */}
         <aside
-          className={`${
-            isSidebarOpen ? 'w-64' : 'w-0'
-          } flex-shrink-0 overflow-hidden transition-all duration-200 ease-in-out border-r border-border bg-card`}
+          className={`
+            fixed md:relative z-40 md:z-auto
+            h-full
+            transition-all duration-200 ease-in-out
+            border-r border-border bg-card
+            ${isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:translate-x-0'}
+            md:flex-shrink-0 md:overflow-hidden
+          `}
         >
           <Sidebar />
         </aside>

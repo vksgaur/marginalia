@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppStore } from '@/lib/store';
+import { useAuth } from '@/components/shared/auth-provider';
 import { useArticleCount, useAllTags } from '@/lib/hooks/use-articles';
 import { useFolders, useFolderArticleCounts } from '@/lib/hooks/use-folders';
 import { FolderList } from '@/components/organization/folder-list';
@@ -26,6 +27,9 @@ const FILTERS: { key: FilterOption; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function Sidebar() {
+  const { user } = useAuth();
+  const userId = user?.uid || null;
+
   const currentFilter = useAppStore((s) => s.currentFilter);
   const setFilter = useAppStore((s) => s.setFilter);
   const currentFolderId = useAppStore((s) => s.currentFolderId);
@@ -34,14 +38,14 @@ export function Sidebar() {
   const setTagFilter = useAppStore((s) => s.setTagFilter);
   const setActiveArticleId = useAppStore((s) => s.setActiveArticleId);
 
-  const articleCount = useArticleCount();
-  const allTags = useAllTags();
-  const folders = useFolders();
-  const folderCounts = useFolderArticleCounts();
+  const articleCount = useArticleCount(userId);
+  const allTags = useAllTags(userId);
+  const folders = useFolders(userId);
+  const folderCounts = useFolderArticleCounts(userId);
 
   const handleSurpriseMe = async () => {
     const articles = await db.articles
-      .filter((a) => !a.isRead && !a.isArchived)
+      .filter((a) => !a.isRead && !a.isArchived && a.userId === userId)
       .toArray();
     if (articles.length > 0) {
       const random = articles[Math.floor(Math.random() * articles.length)];
@@ -105,6 +109,7 @@ export function Sidebar() {
           folderCounts={folderCounts || new Map()}
           currentFolderId={currentFolderId}
           onSelectFolder={setFolderId}
+          userId={userId}
         />
 
         <Separator className="my-3" />

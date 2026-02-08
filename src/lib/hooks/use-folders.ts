@@ -5,15 +5,15 @@ import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import type { Folder } from '@/lib/types';
 
-export function useFolders() {
+export function useFolders(userId: string | null) {
   return useLiveQuery(async () => {
-    return db.folders.orderBy('order').toArray();
-  }, []);
+    return db.folders.filter((f) => f.userId === userId).sortBy('order');
+  }, [userId]);
 }
 
-export function useFolderArticleCounts() {
+export function useFolderArticleCounts(userId: string | null) {
   return useLiveQuery(async () => {
-    const articles = await db.articles.toArray();
+    const articles = await db.articles.filter((a) => a.userId === userId).toArray();
     const counts = new Map<string, number>();
     for (const article of articles) {
       if (article.folderId && !article.isArchived) {
@@ -21,18 +21,18 @@ export function useFolderArticleCounts() {
       }
     }
     return counts;
-  }, []);
+  }, [userId]);
 }
 
-export async function addFolder(name: string, color: string) {
-  const count = await db.folders.count();
+export async function addFolder(name: string, color: string, userId: string | null) {
+  const existing = await db.folders.filter((f) => f.userId === userId).count();
   const folder: Folder = {
     id: nanoid(),
     name,
     color,
-    order: count,
+    order: existing,
     createdAt: new Date().toISOString(),
-    userId: null,
+    userId,
   };
   await db.folders.add(folder);
   return folder;
@@ -44,7 +44,6 @@ export async function updateFolder(id: string, changes: Partial<Folder>) {
 
 export async function deleteFolder(id: string) {
   await db.transaction('rw', db.folders, db.articles, async () => {
-    // Unassign articles from this folder
     const articles = await db.articles.where('folderId').equals(id).toArray();
     for (const article of articles) {
       await db.articles.update(article.id, { folderId: null });

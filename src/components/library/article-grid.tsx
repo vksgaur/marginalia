@@ -1,12 +1,16 @@
 'use client';
 
 import { useAppStore } from '@/lib/store';
+import { useAuth } from '@/components/shared/auth-provider';
 import { useArticles } from '@/lib/hooks/use-articles';
 import { ArticleCard } from './article-card';
 import { EmptyState } from './empty-state';
 import { Loader2 } from 'lucide-react';
 
 export function ArticleGrid() {
+  const { user } = useAuth();
+  const userId = user?.uid || null;
+
   const filter = useAppStore((s) => s.currentFilter);
   const folderId = useAppStore((s) => s.currentFolderId);
   const tagFilter = useAppStore((s) => s.currentTagFilter);
@@ -14,7 +18,7 @@ export function ArticleGrid() {
   const sortOption = useAppStore((s) => s.sortOption);
   const viewMode = useAppStore((s) => s.viewMode);
 
-  const articles = useArticles(filter, folderId, tagFilter, searchQuery, sortOption);
+  const articles = useArticles(filter, folderId, tagFilter, searchQuery, sortOption, userId);
 
   if (articles === undefined) {
     return (

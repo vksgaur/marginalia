@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Libre_Baskerville } from "next/font/google";
 import { ThemeProvider } from "@/components/shared/theme-provider";
+import { AuthProvider } from "@/components/shared/auth-provider";
 import { Toaster } from "@/components/shared/toast";
 import "./globals.css";
 
@@ -39,7 +40,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <AuthProvider>
+            {children}
+          </AuthProvider>
           <Toaster />
         </ThemeProvider>
       </body>

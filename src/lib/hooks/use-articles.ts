@@ -10,10 +10,14 @@ export function useArticles(
   folderId: string | null,
   tagFilter: string | null,
   searchQuery: string,
-  sortOption: SortOption
+  sortOption: SortOption,
+  userId: string | null
 ) {
   return useLiveQuery(async () => {
     let articles = await db.articles.toArray();
+
+    // Scope by user — show only this user's articles (or anonymous articles if no user)
+    articles = articles.filter((a) => a.userId === userId);
 
     // Apply filter
     if (filter === 'favorites') articles = articles.filter((a) => a.isFavorite);
@@ -54,7 +58,7 @@ export function useArticles(
     });
 
     return articles;
-  }, [filter, folderId, tagFilter, searchQuery, sortOption]);
+  }, [filter, folderId, tagFilter, searchQuery, sortOption, userId]);
 }
 
 export function useArticle(id: string | null) {
@@ -64,9 +68,9 @@ export function useArticle(id: string | null) {
   }, [id]);
 }
 
-export function useAllTags() {
+export function useAllTags(userId: string | null) {
   return useLiveQuery(async () => {
-    const articles = await db.articles.toArray();
+    const articles = await db.articles.filter((a) => a.userId === userId).toArray();
     const tagMap = new Map<string, number>();
     for (const article of articles) {
       for (const tag of article.tags) {
@@ -76,16 +80,16 @@ export function useAllTags() {
     return Array.from(tagMap.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([tag, count]) => ({ tag, count }));
-  }, []);
+  }, [userId]);
 }
 
-export function useArticleCount() {
+export function useArticleCount(userId: string | null) {
   return useLiveQuery(async () => {
-    const total = await db.articles.count();
-    const articles = await db.articles.toArray();
+    const articles = await db.articles.filter((a) => a.userId === userId).toArray();
+    const total = articles.length;
     const unread = articles.filter((a) => !a.isRead && !a.isArchived).length;
     return { total, unread };
-  }, []);
+  }, [userId]);
 }
 
 export async function addArticle(data: {
@@ -98,8 +102,12 @@ export async function addArticle(data: {
   readingTime: number;
   tags?: string[];
   folderId?: string | null;
+  userId?: string | null;
 }) {
-  const existing = await db.articles.where('url').equals(data.url).first();
+  // Check duplicates scoped by user
+  const existing = await db.articles
+    .filter((a) => a.url === data.url && a.userId === (data.userId || null))
+    .first();
   if (existing) throw new Error('Article already saved');
 
   const article: Article = {
@@ -123,7 +131,7 @@ export async function addArticle(data: {
     dateAdded: new Date().toISOString(),
     lastModified: new Date().toISOString(),
     syncStatus: 'pending',
-    userId: null,
+    userId: data.userId || null,
   };
 
   await db.articles.add(article);

@@ -2,6 +2,7 @@
 
 import { useAppStore } from '@/lib/store';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
+import { UserMenu } from '@/components/shared/user-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,6 +14,7 @@ import {
 import {
   PanelLeftClose,
   PanelLeftOpen,
+  Menu,
   Search,
   LayoutGrid,
   List,
@@ -38,14 +40,19 @@ export function Header() {
   const setSortOption = useAppStore((s) => s.setSortOption);
 
   return (
-    <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-      {/* Sidebar toggle */}
+    <header className="flex items-center gap-2 sm:gap-3 border-b border-border px-3 sm:px-4 py-3">
+      {/* Sidebar toggle — hamburger on mobile, panel icons on desktop */}
       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleSidebar}>
-        {isSidebarOpen ? (
-          <PanelLeftClose className="h-4 w-4" />
-        ) : (
-          <PanelLeftOpen className="h-4 w-4" />
-        )}
+        <span className="md:hidden">
+          <Menu className="h-4 w-4" />
+        </span>
+        <span className="hidden md:inline">
+          {isSidebarOpen ? (
+            <PanelLeftClose className="h-4 w-4" />
+          ) : (
+            <PanelLeftOpen className="h-4 w-4" />
+          )}
+        </span>
       </Button>
 
       {/* Search */}
@@ -97,6 +104,9 @@ export function Header() {
 
         {/* Theme */}
         <ThemeToggle />
+
+        {/* User menu */}
+        <UserMenu />
       </div>
     </header>
   );
