@@ -1,0 +1,16 @@
+{
+  "name": "Marginalia",
+  "short_name": "Marginalia",
+  "description": "Save, read, and highlight articles",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/icons/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
