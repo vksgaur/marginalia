@@ -12,6 +12,8 @@ import type {
   LineHeight,
   ContentWidth,
   HighlightColor,
+  SearchScope,
+  ReadTimeFilter,
 } from './types';
 
 interface AppState {
@@ -33,6 +35,34 @@ interface AppState {
   setViewMode: (mode: ViewMode) => void;
   sortOption: SortOption;
   setSortOption: (sort: SortOption) => void;
+
+  // Search scope
+  searchScope: SearchScope;
+  setSearchScope: (scope: SearchScope) => void;
+
+  // Read time filter
+  readTimeFilter: ReadTimeFilter;
+  setReadTimeFilter: (filter: ReadTimeFilter) => void;
+
+  // Daily highlights
+  dailyHighlightDismissedDate: string | null;
+  dismissDailyHighlights: () => void;
+
+  // Bulk actions
+  bulkSelectMode: boolean;
+  selectedArticleIds: string[];
+  toggleBulkSelectMode: () => void;
+  toggleSelectArticle: (id: string) => void;
+  selectAllArticles: (ids: string[]) => void;
+  clearSelection: () => void;
+
+  // Surprise Me
+  surpriseArticleId: string | null;
+  setSurpriseArticleId: (id: string | null) => void;
+
+  // Stats dialog
+  isStatsOpen: boolean;
+  setStatsOpen: (open: boolean) => void;
 
   // Reader
   activeArticleId: string | null;
@@ -74,6 +104,42 @@ export const useAppStore = create<AppState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
       sortOption: 'dateAdded',
       setSortOption: (sort) => set({ sortOption: sort }),
+
+      // Search scope
+      searchScope: 'title',
+      setSearchScope: (scope) => set({ searchScope: scope }),
+
+      // Read time filter
+      readTimeFilter: null,
+      setReadTimeFilter: (filter) => set((s) => ({ readTimeFilter: s.readTimeFilter === filter ? null : filter })),
+
+      // Daily highlights
+      dailyHighlightDismissedDate: null,
+      dismissDailyHighlights: () => set({ dailyHighlightDismissedDate: new Date().toDateString() }),
+
+      // Bulk actions
+      bulkSelectMode: false,
+      selectedArticleIds: [],
+      toggleBulkSelectMode: () => set((s) => ({
+        bulkSelectMode: !s.bulkSelectMode,
+        selectedArticleIds: s.bulkSelectMode ? [] : s.selectedArticleIds,
+      })),
+      toggleSelectArticle: (id) => set((s) => ({
+        bulkSelectMode: true,
+        selectedArticleIds: s.selectedArticleIds.includes(id)
+          ? s.selectedArticleIds.filter((i) => i !== id)
+          : [...s.selectedArticleIds, id],
+      })),
+      selectAllArticles: (ids) => set({ selectedArticleIds: ids, bulkSelectMode: true }),
+      clearSelection: () => set({ selectedArticleIds: [], bulkSelectMode: false }),
+
+      // Surprise Me
+      surpriseArticleId: null,
+      setSurpriseArticleId: (id) => set({ surpriseArticleId: id }),
+
+      // Stats dialog
+      isStatsOpen: false,
+      setStatsOpen: (open) => set({ isStatsOpen: open }),
 
       // Reader
       activeArticleId: null,

@@ -3,7 +3,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
-import type { Article, FilterOption, SortOption } from '@/lib/types';
+import { syncArticle, deleteFromFirestore } from '@/lib/sync';
+import type { Article, FilterOption, SortOption, ReadTimeFilter, SearchScope } from '@/lib/types';
 
 export function useArticles(
   filter: FilterOption,
@@ -11,7 +12,9 @@ export function useArticles(
   tagFilter: string | null,
   searchQuery: string,
   sortOption: SortOption,
-  userId: string | null
+  userId: string | null,
+  readTimeFilter?: ReadTimeFilter,
+  searchScope?: SearchScope
 ) {
   return useLiveQuery(async () => {
     let articles = await db.articles.toArray();
@@ -31,15 +34,32 @@ export function useArticles(
     // Filter by tag
     if (tagFilter) articles = articles.filter((a) => a.tags.includes(tagFilter));
 
+    // Filter by read time
+    if (readTimeFilter) {
+      articles = articles.filter((a) => {
+        if (readTimeFilter === 'short') return a.readingTime < 5;
+        if (readTimeFilter === 'medium') return a.readingTime >= 5 && a.readingTime <= 15;
+        if (readTimeFilter === 'long') return a.readingTime > 15;
+        return true;
+      });
+    }
+
     // Search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      articles = articles.filter(
-        (a) =>
+      const scope = searchScope || 'title';
+      articles = articles.filter((a) => {
+        const titleMatch =
           a.title.toLowerCase().includes(q) ||
           a.url.toLowerCase().includes(q) ||
-          a.tags.some((t) => t.toLowerCase().includes(q))
-      );
+          a.tags.some((t) => t.toLowerCase().includes(q));
+        if (scope === 'title') return titleMatch;
+        if (scope === 'fulltext') {
+          const plainContent = a.content.replace(/<[^>]*>/g, '').toLowerCase();
+          return titleMatch || plainContent.includes(q);
+        }
+        return titleMatch;
+      });
     }
 
     // Sort
@@ -58,7 +78,7 @@ export function useArticles(
     });
 
     return articles;
-  }, [filter, folderId, tagFilter, searchQuery, sortOption, userId]);
+  }, [filter, folderId, tagFilter, searchQuery, sortOption, userId, readTimeFilter, searchScope]);
 }
 
 export function useArticle(id: string | null) {
@@ -135,19 +155,26 @@ export async function addArticle(data: {
   };
 
   await db.articles.add(article);
+  syncArticle(article);
   return article;
 }
 
 export async function updateArticle(id: string, changes: Partial<Article>) {
   await db.articles.update(id, { ...changes, lastModified: new Date().toISOString() });
+  const updated = await db.articles.get(id);
+  if (updated) syncArticle(updated);
 }
 
 export async function deleteArticle(id: string) {
+  const article = await db.articles.get(id);
   await db.transaction('rw', db.articles, db.highlights, db.sessions, async () => {
     await db.highlights.where('articleId').equals(id).delete();
     await db.sessions.where('articleId').equals(id).delete();
     await db.articles.delete(id);
   });
+  if (article?.userId) {
+    deleteFromFirestore(article.userId, 'articles', id);
+  }
 }
 
 export async function toggleFavorite(id: string) {
@@ -166,4 +193,81 @@ export async function toggleArchive(id: string) {
 
 export async function markAsRead(id: string) {
   await updateArticle(id, { isRead: true, lastReadAt: new Date().toISOString() });
+}
+
+export function useReadingStats(userId: string | null) {
+  return useLiveQuery(async () => {
+    const articles = await db.articles.filter((a) => a.userId === userId).toArray();
+    const highlights = await db.highlights.toArray();
+    const sessions = await db.sessions.toArray();
+    const userHighlights = highlights.filter((h) => {
+      const articleIds = new Set(articles.map((a) => a.id));
+      return articleIds.has(h.articleId);
+    });
+
+    const totalArticles = articles.length;
+    const readArticles = articles.filter((a) => a.isRead).length;
+    const totalReadTime = articles.reduce((sum, a) => sum + a.totalReadTime, 0);
+    const avgReadTime = readArticles > 0 ? Math.round(totalReadTime / readArticles) : 0;
+
+    // Articles read this week / month
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const readThisWeek = articles.filter((a) => a.lastReadAt && new Date(a.lastReadAt) >= weekAgo).length;
+    const readThisMonth = articles.filter((a) => a.lastReadAt && new Date(a.lastReadAt) >= monthAgo).length;
+
+    // Reading streak
+    const readDates = new Set(
+      sessions.map((s) => new Date(s.startTime).toDateString())
+    );
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      if (readDates.has(d.toDateString())) {
+        streak++;
+      } else if (i > 0) {
+        break;
+      }
+    }
+
+    // Top tags
+    const tagMap = new Map<string, number>();
+    for (const a of articles) {
+      for (const t of a.tags) tagMap.set(t, (tagMap.get(t) || 0) + 1);
+    }
+    const topTags = Array.from(tagMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag, count]) => ({ tag, count }));
+
+    // Articles per week (last 8 weeks)
+    const weeklyData: { label: string; count: number }[] = [];
+    for (let i = 7; i >= 0; i--) {
+      const weekStart = new Date(now.getTime() - (i + 1) * 7 * 24 * 60 * 60 * 1000);
+      const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+      const count = articles.filter(
+        (a) => a.lastReadAt && new Date(a.lastReadAt) >= weekStart && new Date(a.lastReadAt) < weekEnd
+      ).length;
+      weeklyData.push({
+        label: `W${8 - i}`,
+        count,
+      });
+    }
+
+    return {
+      totalArticles,
+      readArticles,
+      totalReadTime,
+      avgReadTime,
+      readThisWeek,
+      readThisMonth,
+      streak,
+      highlightCount: userHighlights.length,
+      topTags,
+      weeklyData,
+    };
+  }, [userId]);
 }

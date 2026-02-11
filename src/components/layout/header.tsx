@@ -20,7 +20,13 @@ import {
   List,
   ArrowUpDown,
 } from 'lucide-react';
-import type { SortOption } from '@/lib/types';
+import type { SortOption, SearchScope } from '@/lib/types';
+
+const SEARCH_SCOPES: { key: SearchScope; label: string }[] = [
+  { key: 'title', label: 'Title' },
+  { key: 'fulltext', label: 'Content' },
+  { key: 'highlights', label: 'Highlights' },
+];
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'dateAdded', label: 'Date Added' },
@@ -38,6 +44,8 @@ export function Header() {
   const setViewMode = useAppStore((s) => s.setViewMode);
   const sortOption = useAppStore((s) => s.sortOption);
   const setSortOption = useAppStore((s) => s.setSortOption);
+  const searchScope = useAppStore((s) => s.searchScope);
+  const setSearchScope = useAppStore((s) => s.setSearchScope);
 
   return (
     <header className="flex items-center gap-2 sm:gap-3 border-b border-border px-3 sm:px-4 py-3">
@@ -59,11 +67,28 @@ export function Header() {
       <div className="relative flex-1 max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search articles..."
+          placeholder={searchScope === 'fulltext' ? 'Search content...' : searchScope === 'highlights' ? 'Search highlights...' : 'Search articles...'}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-9 h-9"
         />
+      </div>
+
+      {/* Search scope */}
+      <div className="hidden sm:flex items-center gap-0.5 bg-muted rounded-md p-0.5">
+        {SEARCH_SCOPES.map((scope) => (
+          <button
+            key={scope.key}
+            onClick={() => setSearchScope(scope.key)}
+            className={`px-2 py-1 text-xs rounded transition-colors ${
+              searchScope === scope.key
+                ? 'bg-background text-foreground shadow-sm font-medium'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {scope.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex items-center gap-1 ml-auto">

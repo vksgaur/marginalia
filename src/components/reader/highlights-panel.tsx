@@ -6,8 +6,11 @@ import { NoteModal } from './note-modal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { HIGHLIGHT_COLORS } from '@/lib/constants';
-import { Trash2, MessageSquare, Copy, X, Highlighter } from 'lucide-react';
+import { AddToCollection } from './add-to-collection';
+import { ShareCard } from '@/components/shared/share-card';
+import { Trash2, MessageSquare, Copy, X, Highlighter, Share2 } from 'lucide-react';
 import { useToast } from '@/components/shared/toast';
+import { useArticle } from '@/lib/hooks/use-articles';
 import type { Highlight } from '@/lib/types';
 
 interface HighlightsPanelProps {
@@ -17,7 +20,9 @@ interface HighlightsPanelProps {
 
 export function HighlightsPanel({ articleId, onClose }: HighlightsPanelProps) {
   const highlights = useHighlights(articleId);
+  const article = useArticle(articleId);
   const [editingHighlight, setEditingHighlight] = useState<Highlight | null>(null);
+  const [sharingHighlight, setSharingHighlight] = useState<Highlight | null>(null);
   const { toast } = useToast();
 
   const handleCopyAll = () => {
@@ -111,6 +116,19 @@ export function HighlightsPanel({ articleId, onClose }: HighlightsPanelProps) {
                   >
                     <MessageSquare className="h-3 w-3" />
                   </Button>
+                  <AddToCollection
+                    highlightId={highlight.id}
+                    currentCollectionId={highlight.collectionId ?? null}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setSharingHighlight(highlight)}
+                    title="Share highlight"
+                  >
+                    <Share2 className="h-3 w-3" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -144,6 +162,19 @@ export function HighlightsPanel({ articleId, onClose }: HighlightsPanelProps) {
         <NoteModal
           highlight={editingHighlight}
           onClose={() => setEditingHighlight(null)}
+        />
+      )}
+
+      {/* Share Card */}
+      {sharingHighlight && (
+        <ShareCard
+          open={!!sharingHighlight}
+          onOpenChange={() => setSharingHighlight(null)}
+          text={sharingHighlight.text}
+          note={sharingHighlight.note}
+          color={sharingHighlight.color}
+          articleTitle={article?.title || ''}
+          siteName={article?.siteName || ''}
         />
       )}
     </div>

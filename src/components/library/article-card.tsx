@@ -24,8 +24,28 @@ interface ArticleCardProps {
 
 export function ArticleCard({ article, viewMode }: ArticleCardProps) {
   const setActiveArticleId = useAppStore((s) => s.setActiveArticleId);
+  const bulkSelectMode = useAppStore((s) => s.bulkSelectMode);
+  const selectedArticleIds = useAppStore((s) => s.selectedArticleIds);
+  const toggleSelectArticle = useAppStore((s) => s.toggleSelectArticle);
   const { toast } = useToast();
   const [showDelete, setShowDelete] = useState(false);
+  const isSelected = selectedArticleIds.includes(article.id);
+
+  const handleClick = () => {
+    if (bulkSelectMode) {
+      toggleSelectArticle(article.id);
+    } else {
+      setActiveArticleId(article.id);
+    }
+  };
+
+  const handleLongPress = (e: React.MouseEvent) => {
+    // Right-click or Ctrl+Click to enter bulk select
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      toggleSelectArticle(article.id);
+    }
+  };
 
   const handleDelete = async () => {
     await deleteArticle(article.id);
@@ -49,9 +69,16 @@ export function ArticleCard({ article, viewMode }: ArticleCardProps) {
     return (
       <>
         <div
-          className="group flex items-center gap-4 px-6 py-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border"
-          onClick={() => setActiveArticleId(article.id)}
+          className={`group flex items-center gap-4 px-6 py-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border ${isSelected ? 'bg-primary/10' : ''}`}
+          onClick={handleClick}
+          onClickCapture={handleLongPress}
         >
+          {/* Bulk select checkbox */}
+          {bulkSelectMode && (
+            <div className={`flex-shrink-0 h-4 w-4 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+              {isSelected && <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+            </div>
+          )}
           {/* Thumbnail */}
           {article.thumbnail && (
             <div className="h-12 w-18 flex-shrink-0 rounded overflow-hidden bg-muted">
@@ -147,9 +174,18 @@ export function ArticleCard({ article, viewMode }: ArticleCardProps) {
   return (
     <>
       <div
-        className="group cursor-pointer rounded-lg border border-border bg-card overflow-hidden transition-all hover:shadow-md hover:border-primary/20"
-        onClick={() => setActiveArticleId(article.id)}
+        className={`group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all hover:shadow-md ${isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/20'}`}
+        onClick={handleClick}
+        onClickCapture={handleLongPress}
       >
+        {/* Bulk select checkbox overlay */}
+        {bulkSelectMode && (
+          <div className="absolute top-2 left-2 z-10">
+            <div className={`h-5 w-5 rounded border-2 flex items-center justify-center bg-background/80 ${isSelected ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+              {isSelected && <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+            </div>
+          </div>
+        )}
         {/* Thumbnail */}
         {article.thumbnail ? (
           <div className="h-36 overflow-hidden bg-muted">

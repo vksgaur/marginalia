@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/components/shared/auth-provider';
 import { useArticleCount, useAllTags } from '@/lib/hooks/use-articles';
 import { useFolders, useFolderArticleCounts } from '@/lib/hooks/use-folders';
 import { FolderList } from '@/components/organization/folder-list';
 import { TagCloud } from '@/components/organization/tag-cloud';
+import { CollectionList } from '@/components/organization/collection-list';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -15,9 +17,17 @@ import {
   BookMarked,
   Shuffle,
   Library,
+  Clock,
+  BarChart3,
 } from 'lucide-react';
-import type { FilterOption } from '@/lib/types';
+import type { FilterOption, ReadTimeFilter } from '@/lib/types';
 import { db } from '@/lib/db';
+
+const READ_TIME_FILTERS: { key: ReadTimeFilter; label: string; description: string }[] = [
+  { key: 'short', label: 'Quick', description: '<5 min' },
+  { key: 'medium', label: 'Medium', description: '5-15 min' },
+  { key: 'long', label: 'Long', description: '>15 min' },
+];
 
 const FILTERS: { key: FilterOption; label: string; icon: React.ReactNode }[] = [
   { key: 'all', label: 'All Articles', icon: <Library className="h-4 w-4" /> },
@@ -29,6 +39,7 @@ const FILTERS: { key: FilterOption; label: string; icon: React.ReactNode }[] = [
 export function Sidebar() {
   const { user } = useAuth();
   const userId = user?.uid || null;
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
 
   const currentFilter = useAppStore((s) => s.currentFilter);
   const setFilter = useAppStore((s) => s.setFilter);
@@ -37,6 +48,10 @@ export function Sidebar() {
   const currentTagFilter = useAppStore((s) => s.currentTagFilter);
   const setTagFilter = useAppStore((s) => s.setTagFilter);
   const setActiveArticleId = useAppStore((s) => s.setActiveArticleId);
+  const readTimeFilter = useAppStore((s) => s.readTimeFilter);
+  const setReadTimeFilter = useAppStore((s) => s.setReadTimeFilter);
+  const setSurpriseArticleId = useAppStore((s) => s.setSurpriseArticleId);
+  const setStatsOpen = useAppStore((s) => s.setStatsOpen);
 
   const articleCount = useArticleCount(userId);
   const allTags = useAllTags(userId);
@@ -49,7 +64,7 @@ export function Sidebar() {
       .toArray();
     if (articles.length > 0) {
       const random = articles[Math.floor(Math.random() * articles.length)];
-      setActiveArticleId(random.id);
+      setSurpriseArticleId(random.id);
     }
   };
 
@@ -103,6 +118,32 @@ export function Sidebar() {
 
         <Separator className="my-3" />
 
+        {/* Read Time Filter */}
+        <div className="px-1">
+          <div className="flex items-center gap-2 px-2 py-1.5">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">By Length</span>
+          </div>
+          <div className="flex gap-1 px-2">
+            {READ_TIME_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setReadTimeFilter(f.key!)}
+                className={`flex-1 rounded-md px-2 py-1.5 text-xs transition-colors ${
+                  readTimeFilter === f.key
+                    ? 'bg-primary text-primary-foreground font-medium'
+                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                }`}
+                title={f.description}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Separator className="my-3" />
+
         {/* Folders */}
         <FolderList
           folders={folders || []}
@@ -110,6 +151,14 @@ export function Sidebar() {
           currentFolderId={currentFolderId}
           onSelectFolder={setFolderId}
           userId={userId}
+        />
+
+        <Separator className="my-3" />
+
+        {/* Collections */}
+        <CollectionList
+          activeCollectionId={activeCollectionId}
+          onSelectCollection={setActiveCollectionId}
         />
 
         <Separator className="my-3" />
@@ -125,8 +174,16 @@ export function Sidebar() {
       {/* Stats footer */}
       {articleCount && (
         <div className="border-t border-border px-4 py-3">
-          <div className="flex justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>{articleCount.total} articles</span>
+            <button
+              onClick={() => setStatsOpen(true)}
+              className="flex items-center gap-1 hover:text-foreground transition-colors"
+              title="Reading Stats"
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              <span>Stats</span>
+            </button>
             <span>{articleCount.unread} unread</span>
           </div>
         </div>

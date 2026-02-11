@@ -119,6 +119,7 @@ export async function importKindleClippings(content: string): Promise<{
           paragraphIndex: i,
           startOffset: 0,
           endOffset: clip.text.length,
+          collectionId: null,
           timestamp: clip.date ? new Date(clip.date).toISOString() : new Date().toISOString(),
           lastModified: new Date().toISOString(),
           userId: null,

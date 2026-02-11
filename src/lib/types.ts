@@ -8,6 +8,8 @@ export type ViewMode = 'grid' | 'list';
 export type SortOption = 'dateAdded' | 'lastRead' | 'readingTime' | 'title';
 export type FilterOption = 'all' | 'favorites' | 'archived' | 'unread';
 export type SyncStatus = 'synced' | 'pending' | 'error';
+export type SearchScope = 'title' | 'fulltext' | 'highlights';
+export type ReadTimeFilter = 'short' | 'medium' | 'long' | null;
 
 export interface Article {
   id: string;
@@ -56,6 +58,9 @@ export interface Highlight {
   startOffset: number;
   endOffset: number;
 
+  // Collections
+  collectionId: string | null;
+
   timestamp: string;
   lastModified: string;
   userId: string | null;
@@ -76,6 +81,13 @@ export interface ReadingSession {
   startTime: number;
   endTime: number;
   duration: number;
+}
+
+export interface HighlightCollection {
+  id: string;
+  name: string;
+  userId: string | null;
+  createdAt: string;
 }
 
 export interface ParsedArticle {

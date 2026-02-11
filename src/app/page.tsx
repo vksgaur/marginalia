@@ -3,7 +3,10 @@
 import { AppLayout } from '@/components/layout/app-layout';
 import { AddArticleForm } from '@/components/library/add-article-form';
 import { ArticleGrid } from '@/components/library/article-grid';
+import { DailyHighlights } from '@/components/library/daily-highlights';
+import { SurpriseCard } from '@/components/library/surprise-card';
 import { ReaderView } from '@/components/reader/reader-view';
+import { StatsDashboard } from '@/components/shared/stats-dashboard';
 import { LoginScreen } from '@/components/shared/login-screen';
 import { useAuth } from '@/components/shared/auth-provider';
 import { useAppStore } from '@/lib/store';
@@ -31,8 +34,11 @@ export default function HomePage() {
   return (
     <AppLayout>
       <AddArticleForm />
+      <DailyHighlights />
       <ArticleGrid />
       {activeArticleId && <ReaderView />}
+      <SurpriseCard />
+      <StatsDashboard />
     </AppLayout>
   );
 }
