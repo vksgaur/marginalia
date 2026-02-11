@@ -90,6 +90,16 @@ export interface HighlightCollection {
   createdAt: string;
 }
 
+export interface Annotation {
+  id: string;
+  articleId: string;
+  paragraphIndex: number;
+  text: string;
+  createdAt: string;
+  lastModified: string;
+  userId: string | null;
+}
+
 export interface ParsedArticle {
   title: string;
   content: string;

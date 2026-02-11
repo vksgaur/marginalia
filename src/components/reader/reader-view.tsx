@@ -135,6 +135,7 @@ export function ReaderView() {
         <ReaderContent
           articleId={article.id}
           content={article.content}
+          articleTags={article.tags}
           onScrollProgress={handleScrollProgress}
         />
 

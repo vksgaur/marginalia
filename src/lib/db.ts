@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Article, Highlight, Folder, ReadingSession, HighlightCollection } from './types';
+import type { Article, Highlight, Folder, ReadingSession, HighlightCollection, Annotation } from './types';
 
 const db = new Dexie('MarginaliaDB') as Dexie & {
   articles: EntityTable<Article, 'id'>;
@@ -7,6 +7,7 @@ const db = new Dexie('MarginaliaDB') as Dexie & {
   folders: EntityTable<Folder, 'id'>;
   sessions: EntityTable<ReadingSession, 'id'>;
   collections: EntityTable<HighlightCollection, 'id'>;
+  annotations: EntityTable<Annotation, 'id'>;
 };
 
 db.version(1).stores({
@@ -22,6 +23,15 @@ db.version(2).stores({
   folders: 'id, name, order',
   sessions: 'id, articleId, startTime',
   collections: 'id, name, userId, createdAt',
+});
+
+db.version(3).stores({
+  articles: 'id, url, title, folderId, isRead, isFavorite, isArchived, dateAdded, lastReadAt, *tags',
+  highlights: 'id, articleId, color, timestamp, collectionId, *tags',
+  folders: 'id, name, order',
+  sessions: 'id, articleId, startTime',
+  collections: 'id, name, userId, createdAt',
+  annotations: 'id, articleId, paragraphIndex',
 });
 
 export { db };

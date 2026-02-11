@@ -1,15 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS, CONTENT_WIDTHS, READER_THEMES } from '@/lib/constants';
+import { FONT_FAMILIES, FONT_SIZES, LINE_HEIGHTS, CONTENT_WIDTHS, READER_THEMES, HIGHLIGHT_COLORS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Settings, Type, AlignLeft, MoveHorizontal, Palette } from 'lucide-react';
-import type { FontFamily, FontSize, LineHeight, ContentWidth, ReaderTheme } from '@/lib/types';
+import { Settings, Type, AlignLeft, MoveHorizontal, Palette, Tag, X, Plus } from 'lucide-react';
+import type { FontFamily, FontSize, LineHeight, ContentWidth, ReaderTheme, HighlightColor } from '@/lib/types';
 
 export function ReaderSettings() {
   const readerTheme = useAppStore((s) => s.readerTheme);
@@ -22,6 +24,11 @@ export function ReaderSettings() {
   const setLineHeight = useAppStore((s) => s.setLineHeight);
   const contentWidth = useAppStore((s) => s.contentWidth);
   const setContentWidth = useAppStore((s) => s.setContentWidth);
+  const tagColorMap = useAppStore((s) => s.tagColorMap);
+  const setTagColor = useAppStore((s) => s.setTagColor);
+  const removeTagColor = useAppStore((s) => s.removeTagColor);
+  const [newTag, setNewTag] = useState('');
+  const [newColor, setNewColor] = useState<HighlightColor>('yellow');
 
   return (
     <DropdownMenu>
@@ -154,6 +161,71 @@ export function ReaderSettings() {
                 </button>
               )
             )}
+          </div>
+        </div>
+        {/* Tag Colors */}
+        <div>
+          <div className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground">
+            <Tag className="h-3 w-3" />
+            Tag Colors
+          </div>
+
+          {/* Existing mappings */}
+          {Object.entries(tagColorMap).length > 0 && (
+            <div className="space-y-1 mb-2">
+              {Object.entries(tagColorMap).map(([tag, color]) => (
+                <div key={tag} className="flex items-center gap-2">
+                  <div
+                    className="h-3.5 w-3.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: HIGHLIGHT_COLORS[color].bg }}
+                  />
+                  <span className="text-xs flex-1 truncate">{tag}</span>
+                  <button
+                    onClick={() => removeTagColor(tag)}
+                    className="p-0.5 rounded hover:bg-accent"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new mapping */}
+          <div className="flex items-center gap-1.5">
+            <Input
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              placeholder="Tag name"
+              className="h-7 text-xs flex-1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newTag.trim()) {
+                  setTagColor(newTag.trim().toLowerCase(), newColor);
+                  setNewTag('');
+                }
+              }}
+            />
+            <div className="flex gap-0.5">
+              {(Object.keys(HIGHLIGHT_COLORS) as HighlightColor[]).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setNewColor(c)}
+                  className={`h-5 w-5 rounded-full ${newColor === c ? 'ring-2 ring-offset-1 ring-primary' : ''}`}
+                  style={{ backgroundColor: HIGHLIGHT_COLORS[c].bg }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                if (newTag.trim()) {
+                  setTagColor(newTag.trim().toLowerCase(), newColor);
+                  setNewTag('');
+                }
+              }}
+              className="p-1 rounded hover:bg-accent"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </DropdownMenuContent>

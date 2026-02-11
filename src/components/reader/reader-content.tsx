@@ -3,8 +3,12 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useHighlights, addHighlight, deleteHighlight } from '@/lib/hooks/use-highlights';
+import { useAnnotations, addAnnotation } from '@/lib/hooks/use-annotations';
+import { useAuth } from '@/components/shared/auth-provider';
 import { updateArticle } from '@/lib/hooks/use-articles';
 import { HighlightPopup } from './highlight-popup';
+import { AnnotationMarker, AddAnnotationButton } from './annotation-marker';
+import { Recommendations } from './recommendations';
 import { FONT_SIZES, LINE_HEIGHTS, CONTENT_WIDTHS, READER_THEMES } from '@/lib/constants';
 import DOMPurify from 'dompurify';
 import type { Highlight, HighlightColor } from '@/lib/types';
@@ -12,12 +16,14 @@ import type { Highlight, HighlightColor } from '@/lib/types';
 interface ReaderContentProps {
   articleId: string;
   content: string;
+  articleTags: string[];
   onScrollProgress: (progress: number) => void;
 }
 
-export function ReaderContent({ articleId, content, onScrollProgress }: ReaderContentProps) {
+export function ReaderContent({ articleId, content, articleTags, onScrollProgress }: ReaderContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectionData, setSelectionData] = useState<{
@@ -25,6 +31,10 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
     startOffset: number;
     endOffset: number;
   } | null>(null);
+  const [paragraphTops, setParagraphTops] = useState<number[]>([]);
+  const [editingNewAnnotation, setEditingNewAnnotation] = useState<number | null>(null);
+  const [newAnnotationText, setNewAnnotationText] = useState('');
+  const newAnnotationRef = useRef<HTMLTextAreaElement>(null);
 
   const readerTheme = useAppStore((s) => s.readerTheme);
   const fontFamily = useAppStore((s) => s.fontFamily);
@@ -32,8 +42,12 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
   const lineHeight = useAppStore((s) => s.lineHeight);
   const contentWidth = useAppStore((s) => s.contentWidth);
   const selectedColor = useAppStore((s) => s.selectedHighlightColor);
+  const setSelectedColor = useAppStore((s) => s.setSelectedHighlightColor);
+  const tagColorMap = useAppStore((s) => s.tagColorMap);
 
+  const { user } = useAuth();
   const highlights = useHighlights(articleId);
+  const annotations = useAnnotations(articleId);
 
   // Sanitize content
   const sanitizedContent = DOMPurify.sanitize(content, {
@@ -77,8 +91,38 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
     if (contentRef.current) {
       contentRef.current.innerHTML = sanitizedContent;
       applyHighlights();
+
+      // Measure paragraph positions for annotation gutter
+      const paragraphs = contentRef.current.querySelectorAll(
+        'p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, figcaption'
+      );
+      const contentTop = contentRef.current.offsetTop;
+      const tops = Array.from(paragraphs).map((p) => (p as HTMLElement).offsetTop - contentTop);
+      setParagraphTops(tops);
     }
   }, [sanitizedContent, applyHighlights]);
+
+  // Focus new annotation textarea
+  useEffect(() => {
+    if (editingNewAnnotation !== null && newAnnotationRef.current) {
+      newAnnotationRef.current.focus();
+    }
+  }, [editingNewAnnotation]);
+
+  const handleAddAnnotation = async (paragraphIndex: number) => {
+    if (!newAnnotationText.trim()) {
+      setEditingNewAnnotation(null);
+      return;
+    }
+    await addAnnotation({
+      articleId,
+      paragraphIndex,
+      text: newAnnotationText.trim(),
+      userId: user?.uid || null,
+    });
+    setNewAnnotationText('');
+    setEditingNewAnnotation(null);
+  };
 
   // Handle scroll progress
   useEffect(() => {
@@ -171,6 +215,14 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
       return;
     }
 
+    // Auto-select highlight color based on article tags
+    for (const tag of articleTags) {
+      if (tagColorMap[tag]) {
+        setSelectedColor(tagColorMap[tag]);
+        break;
+      }
+    }
+
     // Position popup near selection
     const rect = range.getBoundingClientRect();
     const containerRect = scrollContainerRef.current?.getBoundingClientRect();
@@ -183,7 +235,7 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
 
     setSelectedText(text);
     setSelectionData({ paragraphIndex, startOffset, endOffset });
-  }, []);
+  }, [articleTags, tagColorMap, setSelectedColor]);
 
   // Create highlight
   const handleCreateHighlight = useCallback(
@@ -228,6 +280,14 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
 
   const themeStyles = READER_THEMES[readerTheme];
 
+  // Build annotation map by paragraphIndex
+  const annotationMap = new Map<number, typeof annotations extends (infer T)[] | undefined ? T : never>();
+  if (annotations) {
+    for (const a of annotations) {
+      annotationMap.set(a.paragraphIndex, a);
+    }
+  }
+
   return (
     <div
       ref={scrollContainerRef}
@@ -235,19 +295,80 @@ export function ReaderContent({ articleId, content, onScrollProgress }: ReaderCo
       style={{ backgroundColor: themeStyles.bg, color: themeStyles.text }}
     >
       <div
-        className="mx-auto px-6 py-8"
-        style={{ maxWidth: CONTENT_WIDTHS[contentWidth].maxWidth }}
+        className="mx-auto px-6 py-8 flex"
+        style={{ maxWidth: `calc(${CONTENT_WIDTHS[contentWidth].maxWidth} + 3rem)` }}
       >
-        <div
-          ref={contentRef}
-          className={`reader-content ${fontFamily === 'serif' ? 'font-serif' : 'font-sans'}`}
-          style={{
-            fontSize: FONT_SIZES[fontSize].size,
-            lineHeight: LINE_HEIGHTS[lineHeight].value,
-          }}
-          onMouseUp={handleMouseUp}
-          onClick={handleContentClick}
-        />
+        {/* Annotation gutter */}
+        <div ref={gutterRef} className="w-10 flex-shrink-0 relative hidden md:block">
+          {paragraphTops.map((top, i) => {
+            const existing = annotationMap.get(i);
+            if (existing) {
+              return <AnnotationMarker key={existing.id} annotation={existing} top={top} />;
+            }
+            if (editingNewAnnotation === i) {
+              return (
+                <div
+                  key={`new-${i}`}
+                  className="absolute right-0 z-30 w-56 animate-in fade-in slide-in-from-left-2"
+                  style={{ top: `${top}px` }}
+                >
+                  <div className="rounded-lg border border-primary/30 bg-card shadow-lg p-2">
+                    <textarea
+                      ref={newAnnotationRef}
+                      value={newAnnotationText}
+                      onChange={(e) => setNewAnnotationText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddAnnotation(i);
+                        if (e.key === 'Escape') { setEditingNewAnnotation(null); setNewAnnotationText(''); }
+                      }}
+                      className="w-full text-xs bg-transparent border-none outline-none resize-none min-h-[60px]"
+                      style={{ color: themeStyles.text }}
+                      placeholder="Write your note..."
+                    />
+                    <div className="flex justify-end gap-1 mt-1">
+                      <button
+                        onClick={() => { setEditingNewAnnotation(null); setNewAnnotationText(''); }}
+                        className="text-xs px-2 py-0.5 rounded hover:bg-accent text-muted-foreground"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleAddAnnotation(i)}
+                        className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <AddAnnotationButton
+                key={`add-${i}`}
+                top={top}
+                onClick={() => setEditingNewAnnotation(i)}
+              />
+            );
+          })}
+        </div>
+
+        {/* Article content */}
+        <div className="flex-1 min-w-0">
+          <div
+            ref={contentRef}
+            className={`reader-content ${fontFamily === 'serif' ? 'font-serif' : 'font-sans'}`}
+            style={{
+              fontSize: FONT_SIZES[fontSize].size,
+              lineHeight: LINE_HEIGHTS[lineHeight].value,
+            }}
+            onMouseUp={handleMouseUp}
+            onClick={handleContentClick}
+          />
+
+          {/* Recommendations */}
+          <Recommendations articleId={articleId} />
+        </div>
       </div>
 
       {/* Highlight popup */}

@@ -81,6 +81,11 @@ interface AppState {
   toggleHighlightsPanel: () => void;
   selectedHighlightColor: HighlightColor;
   setSelectedHighlightColor: (color: HighlightColor) => void;
+
+  // Tag-to-color mapping
+  tagColorMap: Record<string, HighlightColor>;
+  setTagColor: (tag: string, color: HighlightColor) => void;
+  removeTagColor: (tag: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -158,6 +163,14 @@ export const useAppStore = create<AppState>()(
       toggleHighlightsPanel: () => set((s) => ({ isHighlightsPanelOpen: !s.isHighlightsPanelOpen })),
       selectedHighlightColor: 'yellow',
       setSelectedHighlightColor: (color) => set({ selectedHighlightColor: color }),
+
+      // Tag-to-color mapping
+      tagColorMap: {},
+      setTagColor: (tag, color) => set((s) => ({ tagColorMap: { ...s.tagColorMap, [tag]: color } })),
+      removeTagColor: (tag) => set((s) => {
+        const { [tag]: _, ...rest } = s.tagColorMap;
+        return { tagColorMap: rest };
+      }),
     }),
     {
       name: 'marginalia-settings',
@@ -170,6 +183,7 @@ export const useAppStore = create<AppState>()(
         lineHeight: state.lineHeight,
         contentWidth: state.contentWidth,
         selectedHighlightColor: state.selectedHighlightColor,
+        tagColorMap: state.tagColorMap,
       }),
     }
   )
