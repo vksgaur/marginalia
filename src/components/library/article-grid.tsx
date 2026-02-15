@@ -51,7 +51,7 @@ export function ArticleGrid() {
   return (
     <div>
       <BulkToolbar allArticleIds={articleIds} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 p-3 sm:p-6">
         {articles.map((article) => (
           <ArticleCard key={article.id} article={article} viewMode="grid" />
         ))}

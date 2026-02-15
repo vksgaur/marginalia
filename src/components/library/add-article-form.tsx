@@ -87,7 +87,7 @@ export function AddArticleForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border-b border-border px-6 py-4">
+    <form onSubmit={handleSubmit} className="border-b border-border px-3 sm:px-6 py-3 sm:py-4">
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <Input

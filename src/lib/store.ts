@@ -91,8 +91,8 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      // Sidebar
-      isSidebarOpen: true,
+      // Sidebar — default closed; desktop users toggle with panel button, mobile with hamburger
+      isSidebarOpen: false,
       toggleSidebar: () => set((s) => ({ isSidebarOpen: !s.isSidebarOpen })),
       setSidebarOpen: (open) => set({ isSidebarOpen: open }),
 

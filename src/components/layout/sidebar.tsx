@@ -52,6 +52,14 @@ export function Sidebar() {
   const setReadTimeFilter = useAppStore((s) => s.setReadTimeFilter);
   const setSurpriseArticleId = useAppStore((s) => s.setSurpriseArticleId);
   const setStatsOpen = useAppStore((s) => s.setStatsOpen);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
+
+  // Close sidebar on mobile after selecting a filter
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
 
   const articleCount = useArticleCount(userId);
   const allTags = useAllTags(userId);
@@ -84,7 +92,7 @@ export function Sidebar() {
           {FILTERS.map((f) => (
             <button
               key={f.key}
-              onClick={() => setFilter(f.key)}
+              onClick={() => { setFilter(f.key); closeSidebarOnMobile(); }}
               className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                 currentFilter === f.key && !currentFolderId && !currentTagFilter
                   ? 'bg-accent text-accent-foreground font-medium'
@@ -108,7 +116,7 @@ export function Sidebar() {
 
           {/* Surprise Me */}
           <button
-            onClick={handleSurpriseMe}
+            onClick={() => { handleSurpriseMe(); closeSidebarOnMobile(); }}
             className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
           >
             <Shuffle className="h-4 w-4" />
@@ -128,7 +136,7 @@ export function Sidebar() {
             {READ_TIME_FILTERS.map((f) => (
               <button
                 key={f.key}
-                onClick={() => setReadTimeFilter(f.key!)}
+                onClick={() => { setReadTimeFilter(f.key!); closeSidebarOnMobile(); }}
                 className={`flex-1 rounded-md px-2 py-1.5 text-xs transition-colors ${
                   readTimeFilter === f.key
                     ? 'bg-primary text-primary-foreground font-medium'

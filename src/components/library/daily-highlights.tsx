@@ -21,7 +21,7 @@ export function DailyHighlights() {
   if (!highlights || highlights.length === 0) return null;
 
   return (
-    <div className="mx-6 mt-4 rounded-lg border border-border bg-card p-4">
+    <div className="mx-3 sm:mx-6 mt-4 rounded-lg border border-border bg-card p-3 sm:p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-yellow-500" />

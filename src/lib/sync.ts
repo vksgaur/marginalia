@@ -26,74 +26,99 @@ function getUserCollection(userId: string, collectionName: SyncCollection) {
 export async function pushToFirestore(userId: string) {
   if (!isFirebaseConfigured()) return;
 
-  const articles = await db.articles.toArray();
-  const highlights = await db.highlights.toArray();
-  const folders = await db.folders.toArray();
+  try {
+    const articles = await db.articles.toArray();
+    const highlights = await db.highlights.toArray();
+    const folders = await db.folders.toArray();
 
-  const articlesCol = getUserCollection(userId, 'articles');
-  const highlightsCol = getUserCollection(userId, 'highlights');
-  const foldersCol = getUserCollection(userId, 'folders');
+    const articlesCol = getUserCollection(userId, 'articles');
+    const highlightsCol = getUserCollection(userId, 'highlights');
+    const foldersCol = getUserCollection(userId, 'folders');
 
-  // Push articles
-  for (const article of articles) {
-    await setDoc(doc(articlesCol, article.id), { ...article, userId });
+    // Push articles
+    for (const article of articles) {
+      try {
+        await setDoc(doc(articlesCol, article.id), { ...article, userId });
+      } catch (err) {
+        console.error(`[Sync] Failed to push article ${article.id}:`, err);
+        await db.articles.update(article.id, { syncStatus: 'error' });
+      }
+    }
+
+    // Push highlights
+    for (const highlight of highlights) {
+      try {
+        await setDoc(doc(highlightsCol, highlight.id), { ...highlight, userId });
+      } catch (err) {
+        console.error(`[Sync] Failed to push highlight ${highlight.id}:`, err);
+      }
+    }
+
+    // Push folders
+    for (const folder of folders) {
+      try {
+        await setDoc(doc(foldersCol, folder.id), { ...folder, userId });
+      } catch (err) {
+        console.error(`[Sync] Failed to push folder ${folder.id}:`, err);
+      }
+    }
+
+    // Mark all as synced (only those that didn't error)
+    await db.articles.where('syncStatus').notEqual('error').modify({ syncStatus: 'synced', userId });
+    await db.highlights.toCollection().modify({ userId });
+    await db.folders.toCollection().modify({ userId });
+  } catch (err) {
+    console.error('[Sync] pushToFirestore failed:', err);
   }
-
-  // Push highlights
-  for (const highlight of highlights) {
-    await setDoc(doc(highlightsCol, highlight.id), { ...highlight, userId });
-  }
-
-  // Push folders
-  for (const folder of folders) {
-    await setDoc(doc(foldersCol, folder.id), { ...folder, userId });
-  }
-
-  // Mark all as synced
-  await db.articles.toCollection().modify({ syncStatus: 'synced', userId });
-  await db.highlights.toCollection().modify({ userId });
-  await db.folders.toCollection().modify({ userId });
 }
 
 // Pull from Firestore to local
 export async function pullFromFirestore(userId: string) {
   if (!isFirebaseConfigured()) return;
 
-  const articlesCol = getUserCollection(userId, 'articles');
-  const highlightsCol = getUserCollection(userId, 'highlights');
-  const foldersCol = getUserCollection(userId, 'folders');
+  try {
+    const articlesCol = getUserCollection(userId, 'articles');
+    const highlightsCol = getUserCollection(userId, 'highlights');
+    const foldersCol = getUserCollection(userId, 'folders');
 
-  // Pull articles
-  const articlesSnapshot = await getDocs(articlesCol);
-  for (const docSnap of articlesSnapshot.docs) {
-    const remote = docSnap.data() as Article;
-    const local = await db.articles.get(remote.id);
+    // Pull articles
+    const articlesSnapshot = await getDocs(articlesCol);
+    console.log(`[Sync] Pulling ${articlesSnapshot.docs.length} articles from Firestore`);
+    for (const docSnap of articlesSnapshot.docs) {
+      const remote = docSnap.data() as Article;
+      const local = await db.articles.get(remote.id);
 
-    if (!local || remote.lastModified > local.lastModified) {
-      await db.articles.put({ ...remote, syncStatus: 'synced' });
+      if (!local || remote.lastModified > local.lastModified) {
+        await db.articles.put({ ...remote, syncStatus: 'synced' });
+      }
     }
-  }
 
-  // Pull highlights
-  const highlightsSnapshot = await getDocs(highlightsCol);
-  for (const docSnap of highlightsSnapshot.docs) {
-    const remote = docSnap.data() as Highlight;
-    const local = await db.highlights.get(remote.id);
+    // Pull highlights
+    const highlightsSnapshot = await getDocs(highlightsCol);
+    for (const docSnap of highlightsSnapshot.docs) {
+      const remote = docSnap.data() as Highlight;
+      const local = await db.highlights.get(remote.id);
 
-    if (!local || remote.lastModified > local.lastModified) {
-      await db.highlights.put(remote);
+      if (!local || remote.lastModified > local.lastModified) {
+        await db.highlights.put(remote);
+      }
     }
-  }
 
-  // Pull folders
-  const foldersSnapshot = await getDocs(foldersCol);
-  for (const docSnap of foldersSnapshot.docs) {
-    const remote = docSnap.data() as Folder;
-    const local = await db.folders.get(remote.id);
+    // Pull folders
+    const foldersSnapshot = await getDocs(foldersCol);
+    for (const docSnap of foldersSnapshot.docs) {
+      const remote = docSnap.data() as Folder;
+      const local = await db.folders.get(remote.id);
 
-    if (!local) {
-      await db.folders.put(remote);
+      if (!local) {
+        await db.folders.put(remote);
+      }
     }
+
+    console.log('[Sync] Pull from Firestore complete');
+  } catch (err) {
+    console.error('[Sync] pullFromFirestore failed:', err);
+    throw err; // Re-throw so caller can handle
   }
 }
 
@@ -163,15 +188,25 @@ export function startRealtimeSync(userId: string): Unsubscribe[] {
 // Sync a single article change to Firestore
 export async function syncArticle(article: Article) {
   if (!isFirebaseConfigured() || !article.userId) return;
-  const col = getUserCollection(article.userId, 'articles');
-  await setDoc(doc(col, article.id), article);
+  try {
+    const col = getUserCollection(article.userId, 'articles');
+    await setDoc(doc(col, article.id), article);
+    await db.articles.update(article.id, { syncStatus: 'synced' });
+  } catch (err) {
+    console.error(`[Sync] Failed to sync article ${article.id}:`, err);
+    await db.articles.update(article.id, { syncStatus: 'error' }).catch(() => {});
+  }
 }
 
 // Sync a single highlight change to Firestore
 export async function syncHighlight(highlight: Highlight) {
   if (!isFirebaseConfigured() || !highlight.userId) return;
-  const col = getUserCollection(highlight.userId, 'highlights');
-  await setDoc(doc(col, highlight.id), highlight);
+  try {
+    const col = getUserCollection(highlight.userId, 'highlights');
+    await setDoc(doc(col, highlight.id), highlight);
+  } catch (err) {
+    console.error(`[Sync] Failed to sync highlight ${highlight.id}:`, err);
+  }
 }
 
 // Delete from Firestore
@@ -181,6 +216,10 @@ export async function deleteFromFirestore(
   docId: string
 ) {
   if (!isFirebaseConfigured()) return;
-  const col = getUserCollection(userId, collectionName);
-  await deleteDoc(doc(col, docId));
+  try {
+    const col = getUserCollection(userId, collectionName);
+    await deleteDoc(doc(col, docId));
+  } catch (err) {
+    console.error(`[Sync] Failed to delete ${collectionName}/${docId}:`, err);
+  }
 }

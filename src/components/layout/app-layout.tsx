@@ -26,11 +26,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <aside
           className={`
             fixed md:relative z-40 md:z-auto
-            h-full
+            h-full overflow-hidden
             transition-all duration-200 ease-in-out
             border-r border-border bg-card
             ${isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:translate-x-0'}
-            md:flex-shrink-0 md:overflow-hidden
+            md:flex-shrink-0
           `}
         >
           <Sidebar />

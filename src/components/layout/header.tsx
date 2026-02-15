@@ -50,7 +50,7 @@ export function Header() {
   return (
     <header className="flex items-center gap-2 sm:gap-3 border-b border-border px-3 sm:px-4 py-3">
       {/* Sidebar toggle — hamburger on mobile, panel icons on desktop */}
-      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleSidebar}>
+      <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={toggleSidebar}>
         <span className="md:hidden">
           <Menu className="h-4 w-4" />
         </span>
@@ -63,8 +63,13 @@ export function Header() {
         </span>
       </Button>
 
+      {/* Mobile branding — shown when sidebar is closed on mobile */}
+      {!isSidebarOpen && (
+        <span className="text-sm font-semibold tracking-tight md:hidden flex-shrink-0">Marginalia</span>
+      )}
+
       {/* Search */}
-      <div className="relative flex-1 max-w-md">
+      <div className="relative flex-1 min-w-0 max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder={searchScope === 'fulltext' ? 'Search content...' : searchScope === 'highlights' ? 'Search highlights...' : 'Search articles...'}
@@ -91,7 +96,7 @@ export function Header() {
         ))}
       </div>
 
-      <div className="flex items-center gap-1 ml-auto">
+      <div className="flex items-center gap-1 ml-auto flex-shrink-0">
         {/* Sort */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -112,11 +117,11 @@ export function Header() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* View mode */}
+        {/* View mode — hidden on mobile */}
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="hidden sm:inline-flex h-8 w-8"
           onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
           title={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
         >
@@ -127,8 +132,10 @@ export function Header() {
           )}
         </Button>
 
-        {/* Theme */}
-        <ThemeToggle />
+        {/* Theme — hidden on mobile */}
+        <span className="hidden sm:inline-flex">
+          <ThemeToggle />
+        </span>
 
         {/* User menu */}
         <UserMenu />

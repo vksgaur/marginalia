@@ -69,7 +69,7 @@ export function ArticleCard({ article, viewMode }: ArticleCardProps) {
     return (
       <>
         <div
-          className={`group flex items-center gap-4 px-6 py-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border ${isSelected ? 'bg-primary/10' : ''}`}
+          className={`group flex items-center gap-3 sm:gap-4 px-3 sm:px-6 py-3 cursor-pointer hover:bg-accent/50 transition-colors border-b border-border ${isSelected ? 'bg-primary/10' : ''}`}
           onClick={handleClick}
           onClickCapture={handleLongPress}
         >

@@ -4,7 +4,7 @@ import { BookOpen, Plus } from 'lucide-react';
 
 export function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
+    <div className="flex flex-col items-center justify-center py-10 sm:py-20 px-4 text-center">
       <div className="rounded-full bg-muted p-5 mb-4">
         <BookOpen className="h-10 w-10 text-muted-foreground/50" />
       </div>
