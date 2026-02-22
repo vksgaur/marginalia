@@ -41,45 +41,61 @@ export function BulkToolbar({ allArticleIds }: BulkToolbarProps) {
   if (count === 0) return null;
 
   const handleArchiveAll = async () => {
-    for (const id of selectedArticleIds) {
-      await toggleArchive(id);
+    try {
+      for (const id of selectedArticleIds) {
+        await toggleArchive(id);
+      }
+      toast(`${count} articles archived`);
+      clearSelection();
+    } catch {
+      toast('Failed to archive some articles', 'error');
     }
-    toast(`${count} articles archived`);
-    clearSelection();
   };
 
   const handleDeleteAll = async () => {
-    for (const id of selectedArticleIds) {
-      await deleteArticle(id);
+    try {
+      for (const id of selectedArticleIds) {
+        await deleteArticle(id);
+      }
+      toast(`${count} articles deleted`);
+      clearSelection();
+    } catch {
+      toast('Failed to delete some articles', 'error');
     }
-    toast(`${count} articles deleted`);
-    clearSelection();
   };
 
   const handleAddTag = async () => {
     const tags = tagValue.split(',').map((t) => t.trim()).filter(Boolean);
     if (tags.length === 0) return;
-    for (const id of selectedArticleIds) {
-      const { db } = await import('@/lib/db');
-      const article = await db.articles.get(id);
-      if (article) {
-        const newTags = [...new Set([...article.tags, ...tags])];
-        await updateArticle(id, { tags: newTags });
+    try {
+      for (const id of selectedArticleIds) {
+        const { db } = await import('@/lib/db');
+        const article = await db.articles.get(id);
+        if (article) {
+          const newTags = [...new Set([...article.tags, ...tags])];
+          await updateArticle(id, { tags: newTags });
+        }
       }
+      toast(`Tags added to ${count} articles`);
+      setTagValue('');
+      setTagOpen(false);
+      clearSelection();
+    } catch {
+      toast('Failed to add tags', 'error');
     }
-    toast(`Tags added to ${count} articles`);
-    setTagValue('');
-    setTagOpen(false);
-    clearSelection();
   };
 
   const handleMoveToFolder = async (folderId: string | null) => {
-    for (const id of selectedArticleIds) {
-      await updateArticle(id, { folderId });
+    try {
+      for (const id of selectedArticleIds) {
+        await updateArticle(id, { folderId });
+      }
+      toast(`${count} articles moved`);
+      setFolderOpen(false);
+      clearSelection();
+    } catch {
+      toast('Failed to move articles', 'error');
     }
-    toast(`${count} articles moved`);
-    setFolderOpen(false);
-    clearSelection();
   };
 
   return (

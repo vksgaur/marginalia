@@ -155,14 +155,14 @@ export async function addArticle(data: {
   };
 
   await db.articles.add(article);
-  syncArticle(article);
+  await syncArticle(article);
   return article;
 }
 
 export async function updateArticle(id: string, changes: Partial<Article>) {
   await db.articles.update(id, { ...changes, lastModified: new Date().toISOString() });
   const updated = await db.articles.get(id);
-  if (updated) syncArticle(updated);
+  if (updated) await syncArticle(updated);
 }
 
 export async function deleteArticle(id: string) {
@@ -173,7 +173,7 @@ export async function deleteArticle(id: string) {
     await db.articles.delete(id);
   });
   if (article?.userId) {
-    deleteFromFirestore(article.userId, 'articles', id);
+    await deleteFromFirestore(article.userId, 'articles', id);
   }
 }
 
@@ -198,12 +198,11 @@ export async function markAsRead(id: string) {
 export function useReadingStats(userId: string | null) {
   return useLiveQuery(async () => {
     const articles = await db.articles.filter((a) => a.userId === userId).toArray();
+    const articleIds = new Set(articles.map((a) => a.id));
     const highlights = await db.highlights.toArray();
     const sessions = await db.sessions.toArray();
-    const userHighlights = highlights.filter((h) => {
-      const articleIds = new Set(articles.map((a) => a.id));
-      return articleIds.has(h.articleId);
-    });
+    const userHighlights = highlights.filter((h) => articleIds.has(h.articleId));
+    const userSessions = sessions.filter((s) => articleIds.has(s.articleId));
 
     const totalArticles = articles.length;
     const readArticles = articles.filter((a) => a.isRead).length;
@@ -219,7 +218,7 @@ export function useReadingStats(userId: string | null) {
 
     // Reading streak
     const readDates = new Set(
-      sessions.map((s) => new Date(s.startTime).toDateString())
+      userSessions.map((s) => new Date(s.startTime).toDateString())
     );
     let streak = 0;
     const today = new Date();

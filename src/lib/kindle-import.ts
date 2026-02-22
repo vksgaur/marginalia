@@ -46,7 +46,7 @@ export function parseKindleClippings(content: string): KindleClipping[] {
   return clippings;
 }
 
-export async function importKindleClippings(content: string): Promise<{
+export async function importKindleClippings(content: string, userId?: string | null): Promise<{
   highlights: number;
   articles: number;
 }> {
@@ -92,7 +92,7 @@ export async function importKindleClippings(content: string): Promise<{
         dateAdded: new Date().toISOString(),
         lastModified: new Date().toISOString(),
         syncStatus: 'pending',
-        userId: null,
+        userId: userId ?? null,
       };
       await db.articles.add(article);
       articleCount++;
@@ -122,7 +122,7 @@ export async function importKindleClippings(content: string): Promise<{
           collectionId: null,
           timestamp: clip.date ? new Date(clip.date).toISOString() : new Date().toISOString(),
           lastModified: new Date().toISOString(),
-          userId: null,
+          userId: userId ?? null,
         };
         await db.highlights.add(highlight);
         highlightCount++;

@@ -3,6 +3,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
+import { syncHighlight, syncCollection, deleteFromFirestore } from '@/lib/sync';
 import type { Highlight, HighlightColor, HighlightCollection } from '@/lib/types';
 
 export function useHighlights(articleId: string | null) {
@@ -32,6 +33,7 @@ export async function addHighlight(data: {
   paragraphIndex: number;
   startOffset: number;
   endOffset: number;
+  userId?: string | null;
 }) {
   const highlight: Highlight = {
     id: nanoid(),
@@ -46,19 +48,26 @@ export async function addHighlight(data: {
     collectionId: null,
     timestamp: new Date().toISOString(),
     lastModified: new Date().toISOString(),
-    userId: null,
+    userId: data.userId || null,
   };
 
   await db.highlights.add(highlight);
+  await syncHighlight(highlight);
   return highlight;
 }
 
 export async function updateHighlight(id: string, changes: Partial<Highlight>) {
   await db.highlights.update(id, { ...changes, lastModified: new Date().toISOString() });
+  const updated = await db.highlights.get(id);
+  if (updated) await syncHighlight(updated);
 }
 
 export async function deleteHighlight(id: string) {
+  const highlight = await db.highlights.get(id);
   await db.highlights.delete(id);
+  if (highlight?.userId) {
+    await deleteFromFirestore(highlight.userId, 'highlights', id);
+  }
 }
 
 // Daily highlights — 5 random highlights seeded by today's date
@@ -129,23 +138,25 @@ export function useCollectionHighlights(collectionId: string | null) {
 }
 
 export async function addCollection(name: string, userId: string | null) {
-  const collection: HighlightCollection = {
+  const coll: HighlightCollection = {
     id: nanoid(),
     name,
     userId,
     createdAt: new Date().toISOString(),
   };
-  await db.collections.add(collection);
-  return collection;
+  await db.collections.add(coll);
+  await syncCollection(coll);
+  return coll;
 }
 
 export async function deleteCollection(id: string) {
-  // Remove collection reference from highlights
-  const highlights = await db.highlights.filter((h) => h.collectionId === id).toArray();
-  for (const h of highlights) {
-    await db.highlights.update(h.id, { collectionId: null });
-  }
+  const coll = await db.collections.get(id);
+  // Remove collection reference from highlights (bulk)
+  await db.highlights.where('collectionId').equals(id).modify({ collectionId: null });
   await db.collections.delete(id);
+  if (coll?.userId) {
+    await deleteFromFirestore(coll.userId, 'collections', id);
+  }
 }
 
 export async function addHighlightToCollection(highlightId: string, collectionId: string) {

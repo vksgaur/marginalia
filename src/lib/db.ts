@@ -34,4 +34,28 @@ db.version(3).stores({
   annotations: 'id, articleId, paragraphIndex',
 });
 
+db.version(4).stores({
+  articles: 'id, userId, url, title, folderId, isRead, isFavorite, isArchived, dateAdded, lastReadAt, syncStatus, *tags',
+  highlights: 'id, userId, articleId, color, timestamp, collectionId, *tags',
+  folders: 'id, userId, name, order',
+  sessions: 'id, articleId, startTime',
+  collections: 'id, userId, name, createdAt',
+  annotations: 'id, userId, articleId, paragraphIndex',
+}).upgrade((tx) => {
+  // Ensure existing records have userId: null instead of undefined
+  tx.table('articles').toCollection().modify((article) => {
+    if (article.userId === undefined) article.userId = null;
+    if (article.syncStatus === undefined) article.syncStatus = 'pending';
+  });
+  tx.table('highlights').toCollection().modify((highlight) => {
+    if (highlight.userId === undefined) highlight.userId = null;
+  });
+  tx.table('folders').toCollection().modify((folder) => {
+    if (folder.userId === undefined) folder.userId = null;
+  });
+  tx.table('annotations').toCollection().modify((annotation) => {
+    if (annotation.userId === undefined) annotation.userId = null;
+  });
+});
+
 export { db };

@@ -13,9 +13,9 @@ import {
 } from 'firebase/firestore';
 import { getFirestoreDb, isFirebaseConfigured } from './firebase';
 import { db } from './db';
-import type { Article, Highlight, Folder } from './types';
+import type { Article, Highlight, Folder, Annotation, HighlightCollection } from './types';
 
-type SyncCollection = 'articles' | 'highlights' | 'folders';
+type SyncCollection = 'articles' | 'highlights' | 'folders' | 'annotations' | 'collections';
 
 function getUserCollection(userId: string, collectionName: SyncCollection) {
   const firestore = getFirestoreDb();
@@ -27,9 +27,9 @@ export async function pushToFirestore(userId: string) {
   if (!isFirebaseConfigured()) return;
 
   try {
-    const articles = await db.articles.toArray();
-    const highlights = await db.highlights.toArray();
-    const folders = await db.folders.toArray();
+    const articles = await db.articles.filter((a) => a.userId === userId).toArray();
+    const highlights = await db.highlights.filter((h) => h.userId === userId).toArray();
+    const folders = await db.folders.filter((f) => f.userId === userId).toArray();
 
     const articlesCol = getUserCollection(userId, 'articles');
     const highlightsCol = getUserCollection(userId, 'highlights');
@@ -38,7 +38,7 @@ export async function pushToFirestore(userId: string) {
     // Push articles
     for (const article of articles) {
       try {
-        await setDoc(doc(articlesCol, article.id), { ...article, userId });
+        await setDoc(doc(articlesCol, article.id), article);
       } catch (err) {
         console.error(`[Sync] Failed to push article ${article.id}:`, err);
         await db.articles.update(article.id, { syncStatus: 'error' });
@@ -48,7 +48,7 @@ export async function pushToFirestore(userId: string) {
     // Push highlights
     for (const highlight of highlights) {
       try {
-        await setDoc(doc(highlightsCol, highlight.id), { ...highlight, userId });
+        await setDoc(doc(highlightsCol, highlight.id), highlight);
       } catch (err) {
         console.error(`[Sync] Failed to push highlight ${highlight.id}:`, err);
       }
@@ -57,16 +57,40 @@ export async function pushToFirestore(userId: string) {
     // Push folders
     for (const folder of folders) {
       try {
-        await setDoc(doc(foldersCol, folder.id), { ...folder, userId });
+        await setDoc(doc(foldersCol, folder.id), folder);
       } catch (err) {
         console.error(`[Sync] Failed to push folder ${folder.id}:`, err);
       }
     }
 
-    // Mark all as synced (only those that didn't error)
-    await db.articles.where('syncStatus').notEqual('error').modify({ syncStatus: 'synced', userId });
-    await db.highlights.toCollection().modify({ userId });
-    await db.folders.toCollection().modify({ userId });
+    // Push annotations
+    const annotations = await db.annotations.filter((a) => a.userId === userId).toArray();
+    const annotationsCol = getUserCollection(userId, 'annotations');
+    for (const annotation of annotations) {
+      try {
+        await setDoc(doc(annotationsCol, annotation.id), annotation);
+      } catch (err) {
+        console.error(`[Sync] Failed to push annotation ${annotation.id}:`, err);
+      }
+    }
+
+    // Push collections
+    const collections = await db.collections.filter((c) => c.userId === userId).toArray();
+    const collectionsCol = getUserCollection(userId, 'collections');
+    for (const coll of collections) {
+      try {
+        await setDoc(doc(collectionsCol, coll.id), coll);
+      } catch (err) {
+        console.error(`[Sync] Failed to push collection ${coll.id}:`, err);
+      }
+    }
+
+    // Mark synced articles (only those that didn't error)
+    for (const article of articles) {
+      if (article.syncStatus !== 'error') {
+        await db.articles.update(article.id, { syncStatus: 'synced' });
+      }
+    }
   } catch (err) {
     console.error('[Sync] pushToFirestore failed:', err);
   }
@@ -110,8 +134,32 @@ export async function pullFromFirestore(userId: string) {
       const remote = docSnap.data() as Folder;
       const local = await db.folders.get(remote.id);
 
-      if (!local) {
+      if (!local || (remote.lastModified && remote.lastModified > (local.lastModified || ''))) {
         await db.folders.put(remote);
+      }
+    }
+
+    // Pull annotations
+    const annotationsCol = getUserCollection(userId, 'annotations');
+    const annotationsSnapshot = await getDocs(annotationsCol);
+    for (const docSnap of annotationsSnapshot.docs) {
+      const remote = docSnap.data() as Annotation;
+      const local = await db.annotations.get(remote.id);
+
+      if (!local || remote.lastModified > local.lastModified) {
+        await db.annotations.put(remote);
+      }
+    }
+
+    // Pull collections
+    const collectionsCol = getUserCollection(userId, 'collections');
+    const collectionsSnapshot = await getDocs(collectionsCol);
+    for (const docSnap of collectionsSnapshot.docs) {
+      const remote = docSnap.data() as HighlightCollection;
+      const local = await db.collections.get(remote.id);
+
+      if (!local) {
+        await db.collections.put(remote);
       }
     }
 
@@ -131,54 +179,110 @@ export function startRealtimeSync(userId: string): Unsubscribe[] {
   // Listen to articles
   const articlesCol = getUserCollection(userId, 'articles');
   unsubscribers.push(
-    onSnapshot(articlesCol, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        const remote = change.doc.data() as Article;
-        if (change.type === 'added' || change.type === 'modified') {
-          const local = await db.articles.get(remote.id);
-          if (!local || remote.lastModified > local.lastModified) {
-            await db.articles.put({ ...remote, syncStatus: 'synced' });
+    onSnapshot(articlesCol, async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        try {
+          const remote = change.doc.data() as Article;
+          if (change.type === 'added' || change.type === 'modified') {
+            const local = await db.articles.get(remote.id);
+            if (!local || remote.lastModified > local.lastModified) {
+              await db.articles.put({ ...remote, syncStatus: 'synced' });
+            }
+          } else if (change.type === 'removed') {
+            await db.articles.delete(remote.id);
           }
-        } else if (change.type === 'removed') {
-          await db.articles.delete(remote.id);
+        } catch (err) {
+          console.error('[Sync] Real-time article sync error:', err);
         }
-      });
+      }
     })
   );
 
   // Listen to highlights
   const highlightsCol = getUserCollection(userId, 'highlights');
   unsubscribers.push(
-    onSnapshot(highlightsCol, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        const remote = change.doc.data() as Highlight;
-        if (change.type === 'added' || change.type === 'modified') {
-          const local = await db.highlights.get(remote.id);
-          if (!local || remote.lastModified > local.lastModified) {
-            await db.highlights.put(remote);
+    onSnapshot(highlightsCol, async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        try {
+          const remote = change.doc.data() as Highlight;
+          if (change.type === 'added' || change.type === 'modified') {
+            const local = await db.highlights.get(remote.id);
+            if (!local || remote.lastModified > local.lastModified) {
+              await db.highlights.put(remote);
+            }
+          } else if (change.type === 'removed') {
+            await db.highlights.delete(remote.id);
           }
-        } else if (change.type === 'removed') {
-          await db.highlights.delete(remote.id);
+        } catch (err) {
+          console.error('[Sync] Real-time highlight sync error:', err);
         }
-      });
+      }
     })
   );
 
   // Listen to folders
   const foldersCol = getUserCollection(userId, 'folders');
   unsubscribers.push(
-    onSnapshot(foldersCol, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        const remote = change.doc.data() as Folder;
-        if (change.type === 'added' || change.type === 'modified') {
-          const local = await db.folders.get(remote.id);
-          if (!local) {
-            await db.folders.put(remote);
+    onSnapshot(foldersCol, async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        try {
+          const remote = change.doc.data() as Folder;
+          if (change.type === 'added' || change.type === 'modified') {
+            const local = await db.folders.get(remote.id);
+            if (!local || (remote.lastModified && remote.lastModified > (local.lastModified || ''))) {
+              await db.folders.put(remote);
+            }
+          } else if (change.type === 'removed') {
+            await db.folders.delete(remote.id);
           }
-        } else if (change.type === 'removed') {
-          await db.folders.delete(remote.id);
+        } catch (err) {
+          console.error('[Sync] Real-time folder sync error:', err);
         }
-      });
+      }
+    })
+  );
+
+  // Listen to annotations
+  const annotationsCol = getUserCollection(userId, 'annotations');
+  unsubscribers.push(
+    onSnapshot(annotationsCol, async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        try {
+          const remote = change.doc.data() as Annotation;
+          if (change.type === 'added' || change.type === 'modified') {
+            const local = await db.annotations.get(remote.id);
+            if (!local || remote.lastModified > local.lastModified) {
+              await db.annotations.put(remote);
+            }
+          } else if (change.type === 'removed') {
+            await db.annotations.delete(remote.id);
+          }
+        } catch (err) {
+          console.error('[Sync] Real-time annotation sync error:', err);
+        }
+      }
+    })
+  );
+
+  // Listen to collections
+  const collectionsCol = getUserCollection(userId, 'collections');
+  unsubscribers.push(
+    onSnapshot(collectionsCol, async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        try {
+          const remote = change.doc.data() as HighlightCollection;
+          if (change.type === 'added' || change.type === 'modified') {
+            const local = await db.collections.get(remote.id);
+            if (!local) {
+              await db.collections.put(remote);
+            }
+          } else if (change.type === 'removed') {
+            await db.collections.delete(remote.id);
+          }
+        } catch (err) {
+          console.error('[Sync] Real-time collection sync error:', err);
+        }
+      }
     })
   );
 
@@ -206,6 +310,39 @@ export async function syncHighlight(highlight: Highlight) {
     await setDoc(doc(col, highlight.id), highlight);
   } catch (err) {
     console.error(`[Sync] Failed to sync highlight ${highlight.id}:`, err);
+  }
+}
+
+// Sync a single folder change to Firestore
+export async function syncFolder(folder: Folder) {
+  if (!isFirebaseConfigured() || !folder.userId) return;
+  try {
+    const col = getUserCollection(folder.userId, 'folders');
+    await setDoc(doc(col, folder.id), folder);
+  } catch (err) {
+    console.error(`[Sync] Failed to sync folder ${folder.id}:`, err);
+  }
+}
+
+// Sync a single annotation change to Firestore
+export async function syncAnnotation(annotation: Annotation) {
+  if (!isFirebaseConfigured() || !annotation.userId) return;
+  try {
+    const col = getUserCollection(annotation.userId, 'annotations');
+    await setDoc(doc(col, annotation.id), annotation);
+  } catch (err) {
+    console.error(`[Sync] Failed to sync annotation ${annotation.id}:`, err);
+  }
+}
+
+// Sync a single collection change to Firestore
+export async function syncCollection(coll: HighlightCollection) {
+  if (!isFirebaseConfigured() || !coll.userId) return;
+  try {
+    const col = getUserCollection(coll.userId, 'collections');
+    await setDoc(doc(col, coll.id), coll);
+  } catch (err) {
+    console.error(`[Sync] Failed to sync collection ${coll.id}:`, err);
   }
 }
 

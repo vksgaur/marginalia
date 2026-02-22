@@ -50,10 +50,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const annotations = useAnnotations(articleId);
 
   // Sanitize content
-  const sanitizedContent = DOMPurify.sanitize(content, {
-    ADD_TAGS: ['iframe'],
-    ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'],
-  });
+  const sanitizedContent = DOMPurify.sanitize(content);
 
   // Apply highlights to content
   const applyHighlights = useCallback(() => {
@@ -249,6 +246,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
         paragraphIndex: selectionData.paragraphIndex,
         startOffset: selectionData.startOffset,
         endOffset: selectionData.endOffset,
+        userId: user?.uid || null,
       });
 
       window.getSelection()?.removeAllRanges();

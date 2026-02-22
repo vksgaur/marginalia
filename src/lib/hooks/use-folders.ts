@@ -3,6 +3,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
+import { syncFolder, deleteFromFirestore } from '@/lib/sync';
 import type { Folder } from '@/lib/types';
 
 export function useFolders(userId: string | null) {
@@ -32,22 +33,27 @@ export async function addFolder(name: string, color: string, userId: string | nu
     color,
     order: existing,
     createdAt: new Date().toISOString(),
+    lastModified: new Date().toISOString(),
     userId,
   };
   await db.folders.add(folder);
+  await syncFolder(folder);
   return folder;
 }
 
 export async function updateFolder(id: string, changes: Partial<Folder>) {
-  await db.folders.update(id, changes);
+  await db.folders.update(id, { ...changes, lastModified: new Date().toISOString() });
+  const updated = await db.folders.get(id);
+  if (updated) await syncFolder(updated);
 }
 
 export async function deleteFolder(id: string) {
+  const folder = await db.folders.get(id);
   await db.transaction('rw', db.folders, db.articles, async () => {
-    const articles = await db.articles.where('folderId').equals(id).toArray();
-    for (const article of articles) {
-      await db.articles.update(article.id, { folderId: null });
-    }
+    await db.articles.where('folderId').equals(id).modify({ folderId: null });
     await db.folders.delete(id);
   });
+  if (folder?.userId) {
+    await deleteFromFirestore(folder.userId, 'folders', id);
+  }
 }

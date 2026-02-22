@@ -70,7 +70,7 @@ export async function exportAllDataAsJSON(): Promise<string> {
   );
 }
 
-export async function importDataFromJSON(jsonString: string): Promise<{ articles: number; highlights: number; folders: number }> {
+export async function importDataFromJSON(jsonString: string, userId?: string | null): Promise<{ articles: number; highlights: number; folders: number }> {
   const data = JSON.parse(jsonString);
 
   let articleCount = 0;
@@ -81,7 +81,7 @@ export async function importDataFromJSON(jsonString: string): Promise<{ articles
     for (const folder of data.folders) {
       const existing = await db.folders.get(folder.id);
       if (!existing) {
-        await db.folders.add(folder);
+        await db.folders.add({ ...folder, userId: userId ?? folder.userId ?? null });
         folderCount++;
       }
     }
@@ -91,7 +91,7 @@ export async function importDataFromJSON(jsonString: string): Promise<{ articles
     for (const article of data.articles) {
       const existing = await db.articles.get(article.id);
       if (!existing) {
-        await db.articles.add(article);
+        await db.articles.add({ ...article, userId: userId ?? article.userId ?? null, syncStatus: 'pending' });
         articleCount++;
       }
     }
@@ -101,7 +101,7 @@ export async function importDataFromJSON(jsonString: string): Promise<{ articles
     for (const highlight of data.highlights) {
       const existing = await db.highlights.get(highlight.id);
       if (!existing) {
-        await db.highlights.add(highlight);
+        await db.highlights.add({ ...highlight, userId: userId ?? highlight.userId ?? null });
         highlightCount++;
       }
     }

@@ -72,6 +72,7 @@ export interface Folder {
   color: string;
   order: number;
   createdAt: string;
+  lastModified: string;
   userId: string | null;
 }
 

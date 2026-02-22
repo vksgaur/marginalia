@@ -16,16 +16,20 @@ export function HighlightPopup({ x, y, onSelectColor, onDismiss, activeColor }: 
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let mounted = true;
     const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (mounted && ref.current && !ref.current.contains(e.target as Node)) {
         onDismiss();
       }
     };
-    // Delay to avoid immediate dismiss
+    // Delay to avoid immediate dismiss from the selection click
     const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClick);
+      if (mounted) {
+        document.addEventListener('mousedown', handleClick);
+      }
     }, 100);
     return () => {
+      mounted = false;
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleClick);
     };

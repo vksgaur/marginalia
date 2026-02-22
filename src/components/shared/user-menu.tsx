@@ -51,12 +51,19 @@ export function UserMenu() {
     toast('Backup exported');
   };
 
+  const MAX_IMPORT_SIZE = 50 * 1024 * 1024; // 50MB
+
   const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_IMPORT_SIZE) {
+      toast('File too large (max 50MB)', 'error');
+      e.target.value = '';
+      return;
+    }
     try {
       const text = await file.text();
-      const result = await importDataFromJSON(text);
+      const result = await importDataFromJSON(text, user?.uid);
       toast(`Imported ${result.articles} articles, ${result.highlights} highlights`);
     } catch {
       toast('Invalid backup file', 'error');
@@ -67,9 +74,14 @@ export function UserMenu() {
   const handleKindleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_IMPORT_SIZE) {
+      toast('File too large (max 50MB)', 'error');
+      e.target.value = '';
+      return;
+    }
     try {
       const text = await file.text();
-      const result = await importKindleClippings(text);
+      const result = await importKindleClippings(text, user?.uid);
       toast(`Imported ${result.highlights} highlights from ${result.articles} books`);
     } catch {
       toast('Could not parse Kindle clippings file', 'error');
