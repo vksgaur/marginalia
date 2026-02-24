@@ -24,7 +24,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const mouseupHandledRef = useRef(false);
-  const [popupPosition, setPopupPosition] = useState<{ x: number; y: number } | null>(null);
+  const [popupPosition, setPopupPosition] = useState<{ x: number; y: number; mobile: boolean } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectionData, setSelectionData] = useState<{
     paragraphIndex: number;
@@ -140,7 +140,9 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
 
   // Handle text selection for highlighting (mouse + mobile via selectionchange)
   const handleMouseUp = useCallback(() => {
-    mouseupHandledRef.current = true;
+    // NOTE: do NOT set mouseupHandledRef here — only set it after all validations pass.
+    // Setting it early (even for empty-selection mouseups) would block the very next
+    // selectionchange from showing the popup, which is the main iOS failure mode.
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !contentRef.current) {
       setPopupPosition(null);
@@ -213,6 +215,10 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       return;
     }
 
+    // All validations passed — mark that mouseup is handling this selection so the
+    // concurrent selectionchange debounce (300ms) skips it on desktop.
+    mouseupHandledRef.current = true;
+
     // Auto-select highlight color based on article tags
     for (const tag of articleTags) {
       if (tagColorMap[tag]) {
@@ -221,16 +227,25 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       }
     }
 
-    // Position popup near selection — account for scroll so absolute position is correct
-    const rect = range.getBoundingClientRect();
-    const container = scrollContainerRef.current;
-    const containerRect = container?.getBoundingClientRect();
-    if (containerRect && container) {
-      const scrollTop = container.scrollTop;
-      setPopupPosition({
-        x: rect.left + rect.width / 2 - containerRect.left,
-        y: rect.top - containerRect.top - 10 + scrollTop,
-      });
+    // Position the popup.
+    // On touch devices: use a fixed bar at the bottom of the screen so it doesn't
+    // overlap the iOS native "Copy / Look Up" callout that appears above the selection.
+    // On desktop: float it above the selection as before.
+    const isTouchDevice = 'ontouchstart' in window;
+    if (isTouchDevice) {
+      setPopupPosition({ x: 0, y: 0, mobile: true });
+    } else {
+      const rect = range.getBoundingClientRect();
+      const container = scrollContainerRef.current;
+      const containerRect = container?.getBoundingClientRect();
+      if (containerRect && container) {
+        const scrollTop = container.scrollTop;
+        setPopupPosition({
+          x: rect.left + rect.width / 2 - containerRect.left,
+          y: rect.top - containerRect.top - 10 + scrollTop,
+          mobile: false,
+        });
+      }
     }
 
     setSelectedText(text);
@@ -250,7 +265,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
           return;
         }
         handleMouseUp();
-      }, 300);
+      }, 150);
     };
     document.addEventListener('selectionchange', handleSelectionChange);
     return () => {
@@ -399,6 +414,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
         <HighlightPopup
           x={popupPosition.x}
           y={popupPosition.y}
+          mobile={popupPosition.mobile}
           onSelectColor={handleCreateHighlight}
           onDismiss={() => setPopupPosition(null)}
           activeColor={selectedColor}

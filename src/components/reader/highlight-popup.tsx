@@ -7,12 +7,13 @@ import type { HighlightColor } from '@/lib/types';
 interface HighlightPopupProps {
   x: number;
   y: number;
+  mobile?: boolean;
   onSelectColor: (color: HighlightColor) => void;
   onDismiss: () => void;
   activeColor: HighlightColor;
 }
 
-export function HighlightPopup({ x, y, onSelectColor, onDismiss, activeColor }: HighlightPopupProps) {
+export function HighlightPopup({ x, y, mobile, onSelectColor, onDismiss, activeColor }: HighlightPopupProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export function HighlightPopup({ x, y, onSelectColor, onDismiss, activeColor }: 
     const timer = setTimeout(() => {
       if (mounted) {
         document.addEventListener('mousedown', handleDismiss);
-        // touchstart for faster dismiss on iOS (no 300ms click delay)
+        // touchstart for faster dismiss on iOS (no 300ms synthesised-click delay)
         document.addEventListener('touchstart', handleDismiss, { passive: true });
       }
     }, 100);
@@ -38,15 +39,18 @@ export function HighlightPopup({ x, y, onSelectColor, onDismiss, activeColor }: 
     };
   }, [onDismiss]);
 
+  // On mobile: fixed bar at the bottom of the screen, away from the iOS native
+  // "Copy / Look Up" callout which occupies the space above the selection.
+  // On desktop: float above the selection as usual.
+  const positionStyle = mobile
+    ? { left: '50%', transform: 'translateX(-50%)', bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }
+    : { left: `${x}px`, top: `${y}px`, transform: 'translate(-50%, -100%)' };
+
   return (
     <div
       ref={ref}
-      className="absolute z-50 flex items-center gap-1.5 bg-popover border border-border rounded-lg shadow-xl px-2.5 py-2 animate-in fade-in zoom-in-95"
-      style={{
-        left: `${x}px`,
-        top: `${y}px`,
-        transform: 'translate(-50%, -100%)',
-      }}
+      className={`${mobile ? 'fixed' : 'absolute'} z-50 flex items-center gap-1.5 bg-popover border border-border rounded-lg shadow-xl px-2.5 py-2 animate-in fade-in zoom-in-95`}
+      style={positionStyle}
     >
       {(Object.keys(HIGHLIGHT_COLORS) as HighlightColor[]).map((color) => (
         <button
