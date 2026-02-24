@@ -3,6 +3,7 @@ import { Inter, Libre_Baskerville } from "next/font/google";
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { AuthProvider } from "@/components/shared/auth-provider";
 import { Toaster } from "@/components/shared/toast";
+import { ServiceWorkerRegistration } from "@/components/shared/service-worker";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,8 +21,16 @@ export const metadata: Metadata = {
   title: "Marginalia — Save, Read, Highlight",
   description:
     "A modern reader app for saving articles, highlighting text, and organizing your reading with tags and folders.",
-  icons: { icon: "/icons/favicon.svg" },
   manifest: "/manifest.json",
+  // PWA / iOS home screen
+  appleWebApp: {
+    capable: true,
+    title: "Marginalia",
+    statusBarStyle: "default",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
@@ -44,6 +53,7 @@ export default function RootLayout({
             {children}
           </AuthProvider>
           <Toaster />
+          <ServiceWorkerRegistration />
         </ThemeProvider>
       </body>
     </html>
