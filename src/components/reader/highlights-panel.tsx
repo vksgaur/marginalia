@@ -106,7 +106,8 @@ export function HighlightsPanel({ articleId, onClose }: HighlightsPanelProps) {
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-1 mt-2 pl-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Always visible on mobile (no hover), fade in on desktop hover */}
+                <div className="flex items-center gap-1 mt-2 pl-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                   <Button
                     variant="ghost"
                     size="icon"

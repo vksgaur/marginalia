@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useArticle } from '@/lib/hooks/use-articles';
 import { updateArticle, markAsRead } from '@/lib/hooks/use-articles';
@@ -21,7 +21,10 @@ export function ReaderView() {
 
   const article = useArticle(activeArticleId);
   const { startSession, endSession } = useReadingSession(activeArticleId);
+  // progressRef holds the latest value for use in unmount/close handlers (avoids stale closure).
+  // displayProgress is the state copy that actually drives the progress bar re-renders.
   const progressRef = useRef(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
 
   // Get all non-archived articles for navigation
   const allArticles = useLiveQuery(async () => {
@@ -62,6 +65,7 @@ export function ReaderView() {
   const handleScrollProgress = useCallback(
     (progress: number) => {
       progressRef.current = progress;
+      setDisplayProgress(progress);
     },
     []
   );
@@ -117,7 +121,7 @@ export function ReaderView() {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      <ReadingProgress progress={progressRef.current} />
+      <ReadingProgress progress={displayProgress} />
 
       <ReaderToolbar
         title={article.title}

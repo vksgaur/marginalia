@@ -17,21 +17,24 @@ export function HighlightPopup({ x, y, onSelectColor, onDismiss, activeColor }: 
 
   useEffect(() => {
     let mounted = true;
-    const handleClick = (e: MouseEvent) => {
+    const handleDismiss = (e: Event) => {
       if (mounted && ref.current && !ref.current.contains(e.target as Node)) {
         onDismiss();
       }
     };
-    // Delay to avoid immediate dismiss from the selection click
+    // Delay to avoid immediate dismiss from the selection touch/click that opened the popup
     const timer = setTimeout(() => {
       if (mounted) {
-        document.addEventListener('mousedown', handleClick);
+        document.addEventListener('mousedown', handleDismiss);
+        // touchstart for faster dismiss on iOS (no 300ms click delay)
+        document.addEventListener('touchstart', handleDismiss, { passive: true });
       }
     }, 100);
     return () => {
       mounted = false;
       clearTimeout(timer);
-      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('mousedown', handleDismiss);
+      document.removeEventListener('touchstart', handleDismiss);
     };
   }, [onDismiss]);
 
@@ -52,12 +55,17 @@ export function HighlightPopup({ x, y, onSelectColor, onDismiss, activeColor }: 
             e.stopPropagation();
             onSelectColor(color);
           }}
-          className={`h-7 w-7 rounded-full transition-transform hover:scale-110 ${
-            activeColor === color ? 'ring-2 ring-offset-2 ring-primary' : ''
+          // p-2 gives a 44px touch target (28px circle + 8px padding each side) without changing visuals
+          className={`flex items-center justify-center p-2 rounded-full transition-transform hover:scale-110 active:scale-95 ${
+            activeColor === color ? 'ring-2 ring-offset-1 ring-primary' : ''
           }`}
-          style={{ backgroundColor: HIGHLIGHT_COLORS[color].bg }}
           title={`Highlight ${HIGHLIGHT_COLORS[color].label}`}
-        />
+        >
+          <span
+            className="block h-6 w-6 rounded-full"
+            style={{ backgroundColor: HIGHLIGHT_COLORS[color].bg }}
+          />
+        </button>
       ))}
     </div>
   );

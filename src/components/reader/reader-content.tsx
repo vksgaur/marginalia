@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { useHighlights, addHighlight, deleteHighlight } from '@/lib/hooks/use-highlights';
+import { useHighlights, addHighlight } from '@/lib/hooks/use-highlights';
 import { useAnnotations, addAnnotation } from '@/lib/hooks/use-annotations';
 import { useAuth } from '@/components/shared/auth-provider';
-import { updateArticle } from '@/lib/hooks/use-articles';
 import { HighlightPopup } from './highlight-popup';
 import { AnnotationMarker, AddAnnotationButton } from './annotation-marker';
 import { Recommendations } from './recommendations';
@@ -24,6 +23,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const mouseupHandledRef = useRef(false);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectionData, setSelectionData] = useState<{
@@ -138,8 +138,9 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     return () => container.removeEventListener('scroll', handleScroll);
   }, [onScrollProgress]);
 
-  // Handle text selection for highlighting
+  // Handle text selection for highlighting (mouse + mobile via selectionchange)
   const handleMouseUp = useCallback(() => {
+    mouseupHandledRef.current = true;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !contentRef.current) {
       setPopupPosition(null);
@@ -220,19 +221,43 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       }
     }
 
-    // Position popup near selection
+    // Position popup near selection — account for scroll so absolute position is correct
     const rect = range.getBoundingClientRect();
-    const containerRect = scrollContainerRef.current?.getBoundingClientRect();
-    if (containerRect) {
+    const container = scrollContainerRef.current;
+    const containerRect = container?.getBoundingClientRect();
+    if (containerRect && container) {
+      const scrollTop = container.scrollTop;
       setPopupPosition({
         x: rect.left + rect.width / 2 - containerRect.left,
-        y: rect.top - containerRect.top - 10,
+        y: rect.top - containerRect.top - 10 + scrollTop,
       });
     }
 
     setSelectedText(text);
     setSelectionData({ paragraphIndex, startOffset, endOffset });
   }, [articleTags, tagColorMap, setSelectedColor]);
+
+  // Mobile text selection: selectionchange fires when user adjusts handles on iOS/Android.
+  // mouseup doesn't fire during long-press selection, so we debounce selectionchange instead.
+  // mouseupHandledRef prevents double-firing on desktop where mouseup already ran first.
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const handleSelectionChange = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (mouseupHandledRef.current) {
+          mouseupHandledRef.current = false;
+          return;
+        }
+        handleMouseUp();
+      }, 300);
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      clearTimeout(timeout);
+    };
+  }, [handleMouseUp]);
 
   // Create highlight
   const handleCreateHighlight = useCallback(
@@ -254,7 +279,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       setSelectedText('');
       setSelectionData(null);
     },
-    [articleId, selectedText, selectionData]
+    [articleId, selectedText, selectionData, user]
   );
 
   // Handle clicking on existing highlights
@@ -290,7 +315,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     <div
       ref={scrollContainerRef}
       className="flex-1 overflow-y-auto custom-scrollbar"
-      style={{ backgroundColor: themeStyles.bg, color: themeStyles.text }}
+      style={{ backgroundColor: themeStyles.bg, color: themeStyles.text, overscrollBehavior: 'contain' }}
     >
       <div
         className="mx-auto px-6 py-8 flex"
