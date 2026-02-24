@@ -23,7 +23,6 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
-  const mouseupHandledRef = useRef(false);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number; mobile: boolean } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectionData, setSelectionData] = useState<{
@@ -138,11 +137,9 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     return () => container.removeEventListener('scroll', handleScroll);
   }, [onScrollProgress]);
 
-  // Handle text selection for highlighting (mouse + mobile via selectionchange)
+  // Core selection handler — safe to call from any event (mouseup, touchend, selectionchange).
+  // Idempotent: calling it twice with the same live selection just re-renders the same popup.
   const handleMouseUp = useCallback(() => {
-    // NOTE: do NOT set mouseupHandledRef here — only set it after all validations pass.
-    // Setting it early (even for empty-selection mouseups) would block the very next
-    // selectionchange from showing the popup, which is the main iOS failure mode.
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !contentRef.current) {
       setPopupPosition(null);
@@ -215,10 +212,6 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       return;
     }
 
-    // All validations passed — mark that mouseup is handling this selection so the
-    // concurrent selectionchange debounce (300ms) skips it on desktop.
-    mouseupHandledRef.current = true;
-
     // Auto-select highlight color based on article tags
     for (const tag of articleTags) {
       if (tagColorMap[tag]) {
@@ -252,25 +245,37 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     setSelectionData({ paragraphIndex, startOffset, endOffset });
   }, [articleTags, tagColorMap, setSelectedColor]);
 
-  // Mobile text selection: selectionchange fires when user adjusts handles on iOS/Android.
-  // mouseup doesn't fire during long-press selection, so we debounce selectionchange instead.
-  // mouseupHandledRef prevents double-firing on desktop where mouseup already ran first.
+  // Mobile selection detection.
+  //
+  // iOS Safari does NOT reliably fire `selectionchange` for non-editable divs (known
+  // WebKit limitation on older iOS). The event that IS reliable is `touchend` — it fires
+  // when the user lifts their finger after the initial long-press selection.
+  //
+  // Strategy:
+  //  • touchend  → primary trigger for iOS (fires on finger-lift after long-press)
+  //  • selectionchange → secondary trigger, covers handle-drag finalization + desktop
+  //
+  // handleMouseUp is idempotent so calling it from both sources is harmless.
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout>;
-    const handleSelectionChange = () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        if (mouseupHandledRef.current) {
-          mouseupHandledRef.current = false;
-          return;
-        }
-        handleMouseUp();
-      }, 150);
+    // touchend: fired when user lifts finger; selection is finalized at this point.
+    const onTouchEnd = () => {
+      // Small delay so WebKit has time to commit the selection object.
+      setTimeout(handleMouseUp, 50);
     };
-    document.addEventListener('selectionchange', handleSelectionChange);
+
+    // selectionchange debounce: catches handle-drag adjustments and desktop mouse drag.
+    let scTimer: ReturnType<typeof setTimeout>;
+    const onSelectionChange = () => {
+      clearTimeout(scTimer);
+      scTimer = setTimeout(handleMouseUp, 200);
+    };
+
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    document.addEventListener('selectionchange', onSelectionChange);
     return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange);
-      clearTimeout(timeout);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('selectionchange', onSelectionChange);
+      clearTimeout(scTimer);
     };
   }, [handleMouseUp]);
 

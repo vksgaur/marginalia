@@ -145,6 +145,10 @@ mark[data-color]:hover {
 
 /* Reader article content styles */
 .reader-content {
+  /* Explicitly allow text selection on iOS Safari — without this some iOS versions
+     refuse to select text in a plain non-editable div. */
+  -webkit-user-select: text;
+  user-select: text;
   h1, h2, h3, h4, h5, h6 { font-weight: 700; margin-top: 1.5em; margin-bottom: 0.5em; }
   h1 { font-size: 1.6em; }
   h2 { font-size: 1.35em; }
