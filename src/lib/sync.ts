@@ -176,114 +176,142 @@ export function startRealtimeSync(userId: string): Unsubscribe[] {
 
   const unsubscribers: Unsubscribe[] = [];
 
+  // Shared error handler — Firebase will auto-retry the connection;
+  // we just need to avoid crashing the app when the listener drops.
+  function makeErrorHandler(name: string) {
+    return (error: Error) => {
+      console.warn(`[Sync] ${name} listener disconnected (will auto-retry):`, error.message);
+    };
+  }
+
   // Listen to articles
   const articlesCol = getUserCollection(userId, 'articles');
   unsubscribers.push(
-    onSnapshot(articlesCol, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        try {
-          const remote = change.doc.data() as Article;
-          if (change.type === 'added' || change.type === 'modified') {
-            const local = await db.articles.get(remote.id);
-            if (!local || remote.lastModified > local.lastModified) {
-              await db.articles.put({ ...remote, syncStatus: 'synced' });
+    onSnapshot(
+      articlesCol,
+      async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          try {
+            const remote = change.doc.data() as Article;
+            if (change.type === 'added' || change.type === 'modified') {
+              const local = await db.articles.get(remote.id);
+              if (!local || remote.lastModified > local.lastModified) {
+                await db.articles.put({ ...remote, syncStatus: 'synced' });
+              }
+            } else if (change.type === 'removed') {
+              await db.articles.delete(remote.id);
             }
-          } else if (change.type === 'removed') {
-            await db.articles.delete(remote.id);
+          } catch (err) {
+            console.error('[Sync] Real-time article sync error:', err);
           }
-        } catch (err) {
-          console.error('[Sync] Real-time article sync error:', err);
         }
-      }
-    })
+      },
+      makeErrorHandler('articles')
+    )
   );
 
   // Listen to highlights
   const highlightsCol = getUserCollection(userId, 'highlights');
   unsubscribers.push(
-    onSnapshot(highlightsCol, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        try {
-          const remote = change.doc.data() as Highlight;
-          if (change.type === 'added' || change.type === 'modified') {
-            const local = await db.highlights.get(remote.id);
-            if (!local || remote.lastModified > local.lastModified) {
-              await db.highlights.put(remote);
+    onSnapshot(
+      highlightsCol,
+      async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          try {
+            const remote = change.doc.data() as Highlight;
+            if (change.type === 'added' || change.type === 'modified') {
+              const local = await db.highlights.get(remote.id);
+              if (!local || remote.lastModified > local.lastModified) {
+                await db.highlights.put(remote);
+              }
+            } else if (change.type === 'removed') {
+              await db.highlights.delete(remote.id);
             }
-          } else if (change.type === 'removed') {
-            await db.highlights.delete(remote.id);
+          } catch (err) {
+            console.error('[Sync] Real-time highlight sync error:', err);
           }
-        } catch (err) {
-          console.error('[Sync] Real-time highlight sync error:', err);
         }
-      }
-    })
+      },
+      makeErrorHandler('highlights')
+    )
   );
 
   // Listen to folders
   const foldersCol = getUserCollection(userId, 'folders');
   unsubscribers.push(
-    onSnapshot(foldersCol, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        try {
-          const remote = change.doc.data() as Folder;
-          if (change.type === 'added' || change.type === 'modified') {
-            const local = await db.folders.get(remote.id);
-            if (!local || (remote.lastModified && remote.lastModified > (local.lastModified || ''))) {
-              await db.folders.put(remote);
+    onSnapshot(
+      foldersCol,
+      async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          try {
+            const remote = change.doc.data() as Folder;
+            if (change.type === 'added' || change.type === 'modified') {
+              const local = await db.folders.get(remote.id);
+              if (!local || (remote.lastModified && remote.lastModified > (local.lastModified || ''))) {
+                await db.folders.put(remote);
+              }
+            } else if (change.type === 'removed') {
+              await db.folders.delete(remote.id);
             }
-          } else if (change.type === 'removed') {
-            await db.folders.delete(remote.id);
+          } catch (err) {
+            console.error('[Sync] Real-time folder sync error:', err);
           }
-        } catch (err) {
-          console.error('[Sync] Real-time folder sync error:', err);
         }
-      }
-    })
+      },
+      makeErrorHandler('folders')
+    )
   );
 
   // Listen to annotations
   const annotationsCol = getUserCollection(userId, 'annotations');
   unsubscribers.push(
-    onSnapshot(annotationsCol, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        try {
-          const remote = change.doc.data() as Annotation;
-          if (change.type === 'added' || change.type === 'modified') {
-            const local = await db.annotations.get(remote.id);
-            if (!local || remote.lastModified > local.lastModified) {
-              await db.annotations.put(remote);
+    onSnapshot(
+      annotationsCol,
+      async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          try {
+            const remote = change.doc.data() as Annotation;
+            if (change.type === 'added' || change.type === 'modified') {
+              const local = await db.annotations.get(remote.id);
+              if (!local || remote.lastModified > local.lastModified) {
+                await db.annotations.put(remote);
+              }
+            } else if (change.type === 'removed') {
+              await db.annotations.delete(remote.id);
             }
-          } else if (change.type === 'removed') {
-            await db.annotations.delete(remote.id);
+          } catch (err) {
+            console.error('[Sync] Real-time annotation sync error:', err);
           }
-        } catch (err) {
-          console.error('[Sync] Real-time annotation sync error:', err);
         }
-      }
-    })
+      },
+      makeErrorHandler('annotations')
+    )
   );
 
   // Listen to collections
   const collectionsCol = getUserCollection(userId, 'collections');
   unsubscribers.push(
-    onSnapshot(collectionsCol, async (snapshot) => {
-      for (const change of snapshot.docChanges()) {
-        try {
-          const remote = change.doc.data() as HighlightCollection;
-          if (change.type === 'added' || change.type === 'modified') {
-            const local = await db.collections.get(remote.id);
-            if (!local) {
-              await db.collections.put(remote);
+    onSnapshot(
+      collectionsCol,
+      async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          try {
+            const remote = change.doc.data() as HighlightCollection;
+            if (change.type === 'added' || change.type === 'modified') {
+              const local = await db.collections.get(remote.id);
+              if (!local) {
+                await db.collections.put(remote);
+              }
+            } else if (change.type === 'removed') {
+              await db.collections.delete(remote.id);
             }
-          } else if (change.type === 'removed') {
-            await db.collections.delete(remote.id);
+          } catch (err) {
+            console.error('[Sync] Real-time collection sync error:', err);
           }
-        } catch (err) {
-          console.error('[Sync] Real-time collection sync error:', err);
         }
-      }
-    })
+      },
+      makeErrorHandler('collections')
+    )
   );
 
   return unsubscribers;

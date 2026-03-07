@@ -67,6 +67,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
+  // Handle app resume from background (mobile PWA / tab switching).
+  // When the page becomes visible again, listeners may have been silently
+  // dropped by the browser — restart them and do a lightweight re-pull
+  // so the user sees fresh data without needing to reload.
+  useEffect(() => {
+    if (!user) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) return; // Going to background — nothing to do
+
+      console.log('[Auth] App resumed — checking sync listeners');
+
+      // If all listeners have been cleaned up (e.g. the browser killed them),
+      // restart real-time sync and re-pull any missed changes.
+      if (syncCleanupRef.current.length === 0) {
+        console.log('[Auth] Listeners gone — restarting sync');
+        pullFromFirestore(user.uid).catch((err) => {
+          console.warn('[Auth] Re-pull after resume failed:', err);
+        });
+        const unsubscribers = startRealtimeSync(user.uid);
+        syncCleanupRef.current = unsubscribers;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user]);
+
   return (
     <AuthContext.Provider value={{ user, loading, isConfigured }}>
       {children}

@@ -175,9 +175,12 @@ export const useAppStore = create<AppState>()(
     {
       name: 'marginalia-settings',
       partialize: (state) => ({
-        // Persist the active article so mobile browsers that reload on app-switch
-        // restore the reader instead of dropping back to the home screen.
-        activeArticleId: state.activeArticleId,
+        // NOTE: activeArticleId is intentionally NOT persisted.
+        // Persisting it caused an infinite loading loop on mobile app-resume:
+        // the store hydrates with the old ID before IndexedDB is ready,
+        // useLiveQuery() returns undefined indefinitely, and the spinner
+        // never resolves. The user can simply re-open the article from the
+        // library, which is a far better UX than a frozen loading screen.
         viewMode: state.viewMode,
         sortOption: state.sortOption,
         readerTheme: state.readerTheme,

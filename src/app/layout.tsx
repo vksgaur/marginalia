@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Libre_Baskerville } from "next/font/google";
 import { ThemeProvider } from "@/components/shared/theme-provider";
 import { AuthProvider } from "@/components/shared/auth-provider";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { Toaster } from "@/components/shared/toast";
 import { ServiceWorkerRegistration } from "@/components/shared/service-worker";
 import "./globals.css";
@@ -49,9 +50,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          <ErrorBoundary>
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </ErrorBoundary>
           <Toaster />
           <ServiceWorkerRegistration />
         </ThemeProvider>
