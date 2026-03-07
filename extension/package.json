@@ -1,0 +1,19 @@
+{
+  "name": "marginalia-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "dev": "node esbuild.config.js --watch"
+  },
+  "dependencies": {
+    "firebase": "^12.9.0",
+    "nanoid": "^5.1.6"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.0.0"
+  }
+}
