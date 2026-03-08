@@ -2,7 +2,7 @@ import { GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { getFirebaseAuth } from './firebase';
 import type { AuthState } from './types';
 
-const WEB_CLIENT_ID = '128257432070-gs2gq29coe6n7m1gsu8153tj35bap99r.apps.googleusercontent.com';
+const WEB_CLIENT_ID = '128257432070-lf4j6u3ig3lv4n6ibt4o0garopgi7i8g.apps.googleusercontent.com';
 
 export async function signInWithGoogle(): Promise<AuthState> {
   const redirectUrl = chrome.identity.getRedirectURL();
