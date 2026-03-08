@@ -1,5 +1,4 @@
 import { getAuthState } from '../lib/auth';
-import { saveArticle } from '../lib/api';
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -132,6 +131,10 @@ signOutBtn.addEventListener('click', async () => {
 });
 
 // Save article
+// Delegated to the service worker because it holds the authenticated Firebase
+// instance. A direct Firestore call from the popup would fail with
+// "Missing or insufficient permissions" since the popup's Firebase instance
+// is a separate, unauthenticated context.
 saveBtn.addEventListener('click', async () => {
   if (!currentUrl) return;
 
@@ -150,8 +153,14 @@ saveBtn.addEventListener('click', async () => {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    const title = await saveArticle(auth.userId, currentUrl, tags);
-    showStatus(`✓ Saved: "${title}"`, 'success');
+    const response = await chrome.runtime.sendMessage({
+      type: 'SAVE_ARTICLE',
+      url: currentUrl,
+      tags,
+    });
+
+    if (!response?.success) throw new Error(response?.error || 'Failed to save');
+    showStatus(`✓ Saved: "${response.title}"`, 'success');
     tagsInput.value = '';
     saveBtn.disabled = true;
   } catch (err) {

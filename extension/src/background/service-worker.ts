@@ -1,4 +1,5 @@
-import { signInWithGoogle, signOut } from '../lib/auth';
+import { signInWithGoogle, signOut, getAuthState } from '../lib/auth';
+import { saveArticle } from '../lib/api';
 
 // Create context menu items on install
 chrome.runtime.onInstalled.addListener(() => {
@@ -34,12 +35,11 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 
-// Handle auth messages from the popup.
-// Auth MUST run in the service worker, not the popup, because Chrome closes
-// the extension popup as soon as it loses focus (e.g. when the Google account
-// picker window opens). If sign-in ran in the popup, the JS context would be
-// destroyed before signInWithCredential / storage.set could complete, meaning
-// auth state would never be saved and the user would have to sign in every time.
+// ALL Firebase operations (auth + Firestore) must run in the service worker.
+// The popup and service worker each have their own isolated Firebase app instance.
+// Sign-in authenticates the SERVICE WORKER's Firebase instance. If the popup
+// tried to call Firestore directly, its Firebase instance would be unauthenticated
+// and every write would fail with "Missing or insufficient permissions".
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'SIGN_IN') {
     signInWithGoogle()
@@ -52,6 +52,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     signOut()
       .then(() => sendResponse({ success: true }))
       .catch(() => sendResponse({ success: true })); // Always succeed on sign out
+    return true;
+  }
+
+  if (message.type === 'SAVE_ARTICLE') {
+    const { url, tags } = message as { url: string; tags: string[] };
+    getAuthState()
+      .then((auth) => {
+        if (!auth?.userId) throw new Error('Not signed in');
+        return saveArticle(auth.userId, url, tags);
+      })
+      .then((title) => sendResponse({ success: true, title }))
+      .catch((err) => sendResponse({ success: false, error: err instanceof Error ? err.message : 'Failed to save' }));
     return true;
   }
 });
