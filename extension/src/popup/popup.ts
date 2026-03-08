@@ -1,4 +1,4 @@
-import { getAuthState, signInWithGoogle, signOut } from '../lib/auth';
+import { getAuthState } from '../lib/auth';
 import { saveArticle } from '../lib/api';
 
 const $ = (id: string) => document.getElementById(id)!;
@@ -102,21 +102,32 @@ async function init() {
 }
 
 // Sign in
+// Auth is delegated to the service worker so it survives the popup being closed.
+// Chrome closes the extension popup as soon as it loses focus — which happens
+// the moment the Google account picker window opens. If we ran signInWithGoogle()
+// here, the JS context would be destroyed before signInWithCredential / storage.set
+// could complete, so auth state would never be saved.
 signInBtn.addEventListener('click', async () => {
   showView('loading');
   try {
-    await signInWithGoogle();
+    const response = await chrome.runtime.sendMessage({ type: 'SIGN_IN' });
+    if (!response?.success) throw new Error(response?.error || 'Sign in failed');
     showView('saveForm');
   } catch (err) {
-    showView('signIn');
+    // If the popup closed mid-auth the message port error is expected.
+    // The service worker will still complete the flow and save authState, so
+    // the next time the user opens the popup it will go straight to the save form.
     const msg = err instanceof Error ? err.message : 'Sign in failed';
-    showStatus(`Sign in failed: ${msg}`, 'error');
+    if (!msg.includes('message port closed') && !msg.includes('receiving end')) {
+      showView('signIn');
+      showStatus(`Sign in failed: ${msg}`, 'error');
+    }
   }
 });
 
 // Sign out
 signOutBtn.addEventListener('click', async () => {
-  await signOut();
+  await chrome.runtime.sendMessage({ type: 'SIGN_OUT' });
   showView('signIn');
 });
 
