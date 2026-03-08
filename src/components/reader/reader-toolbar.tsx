@@ -77,8 +77,13 @@ export function ReaderToolbar({
           </Button>
         </div>
 
-        {/* Title */}
+        {/* Title + reading time */}
         <span className="flex-1 truncate text-sm font-medium mx-1 sm:mx-2">{title}</span>
+        {article?.readingTime ? (
+          <span className="hidden sm:block text-xs text-muted-foreground flex-shrink-0 mr-1">
+            {article.readingTime} min
+          </span>
+        ) : null}
 
         {/* Highlight color selector — hidden on very small screens */}
         <div className="hidden md:flex items-center gap-1 border border-border/50 rounded-md px-2 py-1">

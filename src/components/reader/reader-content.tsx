@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { useHighlights, addHighlight } from '@/lib/hooks/use-highlights';
+import { useHighlights, addHighlight, updateHighlight, deleteHighlight } from '@/lib/hooks/use-highlights';
 import { useAnnotations, addAnnotation } from '@/lib/hooks/use-annotations';
 import { useAuth } from '@/components/shared/auth-provider';
-import { HighlightPopup } from './highlight-popup';
+import { HighlightPopup, HighlightContextPopup } from './highlight-popup';
+import { NoteModal } from './note-modal';
 import { AnnotationMarker, AddAnnotationButton } from './annotation-marker';
 import { Recommendations } from './recommendations';
 import { FONT_SIZES, LINE_HEIGHTS, CONTENT_WIDTHS, READER_THEMES } from '@/lib/constants';
@@ -31,6 +32,8 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     endOffset: number;
   } | null>(null);
   const [paragraphTops, setParagraphTops] = useState<number[]>([]);
+  const [activeHighlightContext, setActiveHighlightContext] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [noteHighlight, setNoteHighlight] = useState<Highlight | null>(null);
   const [editingNewAnnotation, setEditingNewAnnotation] = useState<number | null>(null);
   const [newAnnotationText, setNewAnnotationText] = useState('');
   const newAnnotationRef = useRef<HTMLTextAreaElement>(null);
@@ -84,18 +87,29 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
 
   // Re-apply highlights when content or highlights change
   useEffect(() => {
-    if (contentRef.current) {
-      contentRef.current.innerHTML = sanitizedContent;
-      applyHighlights();
+    if (!contentRef.current) return;
 
-      // Measure paragraph positions for annotation gutter
-      const paragraphs = contentRef.current.querySelectorAll(
+    contentRef.current.innerHTML = sanitizedContent;
+    applyHighlights();
+
+    // Measure paragraph positions for annotation gutter.
+    // Must also re-run after images load (ResizeObserver fires on layout shifts).
+    const el = contentRef.current;
+    const measureParagraphTops = () => {
+      if (!el) return;
+      const paragraphs = el.querySelectorAll(
         'p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, figcaption'
       );
-      const contentTop = contentRef.current.offsetTop;
+      const contentTop = el.offsetTop;
       const tops = Array.from(paragraphs).map((p) => (p as HTMLElement).offsetTop - contentTop);
       setParagraphTops(tops);
-    }
+    };
+
+    measureParagraphTops();
+
+    const ro = new ResizeObserver(measureParagraphTops);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [sanitizedContent, applyHighlights]);
 
   // Focus new annotation textarea
@@ -227,7 +241,8 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     // `fixed inset-0`, so viewport coords map 1-to-1 with the absolute/fixed offsets.
     // Do NOT add scrollTop: getBoundingClientRect() already returns viewport coords,
     // and adding scrollTop caused the popup to drift down as the user scrolled.
-    const isTouchDevice = 'ontouchstart' in window;
+    // pointer: coarse = finger/stylus (iPad + keyboard still gets floating popup)
+    const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
     if (isTouchDevice) {
       setPopupPosition({ x: 0, y: 0, mobile: true });
     } else {
@@ -277,15 +292,16 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     };
   }, [handleMouseUp]);
 
-  // Create highlight
+  // Create highlight (note is optional — passed when user types in the inline note field)
   const handleCreateHighlight = useCallback(
-    async (color: HighlightColor) => {
+    async (color: HighlightColor, note?: string) => {
       if (!selectedText || !selectionData) return;
 
       await addHighlight({
         articleId,
         text: selectedText,
         color,
+        note,
         paragraphIndex: selectionData.paragraphIndex,
         startOffset: selectionData.startOffset,
         endOffset: selectionData.endOffset,
@@ -300,24 +316,48 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     [articleId, selectedText, selectionData, user]
   );
 
-  // Handle clicking on existing highlights
+  // Handle clicking on existing highlights — show the context popup (recolor / note / delete)
   const handleContentClick = useCallback(
     (e: React.MouseEvent) => {
+      // Don't intercept while user has an active text selection
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
+
       const target = e.target as HTMLElement;
       const mark = target.closest('mark[data-highlight-id]');
       if (mark) {
         const highlightId = mark.getAttribute('data-highlight-id');
-        if (highlightId && highlights) {
-          // For now, clicking a highlight could open notes - we'll dispatch an event
-          const event = new CustomEvent('highlight-click', {
-            detail: { highlightId },
+        if (highlightId) {
+          setPopupPosition(null);
+          const rect = (mark as HTMLElement).getBoundingClientRect();
+          setActiveHighlightContext({
+            id: highlightId,
+            x: rect.left + rect.width / 2,
+            y: rect.top - 8,
           });
-          window.dispatchEvent(event);
         }
       }
     },
-    [highlights]
+    []
   );
+
+  const handleRecolorHighlight = useCallback(async (id: string, color: HighlightColor) => {
+    await updateHighlight(id, { color });
+    setActiveHighlightContext(null);
+  }, []);
+
+  const handleDeleteFromContext = useCallback(async (id: string) => {
+    await deleteHighlight(id);
+    setActiveHighlightContext(null);
+  }, []);
+
+  const handleNoteFromContext = useCallback((id: string) => {
+    const h = highlights?.find((h) => h.id === id);
+    if (h) {
+      setNoteHighlight(h);
+      setActiveHighlightContext(null);
+    }
+  }, [highlights]);
 
   const themeStyles = READER_THEMES[readerTheme];
 
@@ -412,7 +452,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
         </div>
       </div>
 
-      {/* Highlight popup */}
+      {/* Highlight popup — new selection */}
       {popupPosition && (
         <HighlightPopup
           x={popupPosition.x}
@@ -421,6 +461,32 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
           onSelectColor={handleCreateHighlight}
           onDismiss={() => setPopupPosition(null)}
           activeColor={selectedColor}
+        />
+      )}
+
+      {/* Context popup — tapping an existing highlight */}
+      {activeHighlightContext && (() => {
+        const h = highlights?.find((h) => h.id === activeHighlightContext.id);
+        if (!h) return null;
+        return (
+          <HighlightContextPopup
+            currentColor={h.color}
+            hasNote={!!h.note}
+            x={activeHighlightContext.x}
+            y={activeHighlightContext.y}
+            onRecolor={(color) => handleRecolorHighlight(activeHighlightContext.id, color)}
+            onNote={() => handleNoteFromContext(activeHighlightContext.id)}
+            onDelete={() => handleDeleteFromContext(activeHighlightContext.id)}
+            onDismiss={() => setActiveHighlightContext(null)}
+          />
+        );
+      })()}
+
+      {/* Note modal — opened from context popup */}
+      {noteHighlight && (
+        <NoteModal
+          highlight={noteHighlight}
+          onClose={() => setNoteHighlight(null)}
         />
       )}
     </div>

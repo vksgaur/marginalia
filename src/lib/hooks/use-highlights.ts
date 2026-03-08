@@ -30,6 +30,7 @@ export async function addHighlight(data: {
   articleId: string;
   text: string;
   color: HighlightColor;
+  note?: string;
   paragraphIndex: number;
   startOffset: number;
   endOffset: number;
@@ -40,7 +41,7 @@ export async function addHighlight(data: {
     articleId: data.articleId,
     text: data.text,
     color: data.color,
-    note: '',
+    note: data.note || '',
     tags: [],
     paragraphIndex: data.paragraphIndex,
     startOffset: data.startOffset,
