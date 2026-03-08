@@ -81,6 +81,8 @@ interface AppState {
   toggleHighlightsPanel: () => void;
   selectedHighlightColor: HighlightColor;
   setSelectedHighlightColor: (color: HighlightColor) => void;
+  isZenMode: boolean;
+  toggleZenMode: () => void;
 
   // Tag-to-color mapping
   tagColorMap: Record<string, HighlightColor>;
@@ -163,6 +165,8 @@ export const useAppStore = create<AppState>()(
       toggleHighlightsPanel: () => set((s) => ({ isHighlightsPanelOpen: !s.isHighlightsPanelOpen })),
       selectedHighlightColor: 'yellow',
       setSelectedHighlightColor: (color) => set({ selectedHighlightColor: color }),
+      isZenMode: false,
+      toggleZenMode: () => set((s) => ({ isZenMode: !s.isZenMode })),
 
       // Tag-to-color mapping
       tagColorMap: {},

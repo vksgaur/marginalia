@@ -38,6 +38,20 @@ export function ReaderSettings() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72 p-4 space-y-4">
+        {/* Live font preview — updates instantly as settings change */}
+        <div
+          className="rounded-md border border-border/50 px-3 py-2.5"
+          style={{
+            backgroundColor: READER_THEMES[readerTheme].bg,
+            color: READER_THEMES[readerTheme].text,
+            fontFamily: fontFamily === 'serif' ? 'Georgia, serif' : 'system-ui, sans-serif',
+            fontSize: FONT_SIZES[fontSize].size,
+            lineHeight: LINE_HEIGHTS[lineHeight].value,
+          }}
+        >
+          The quick brown fox jumps over the lazy dog.
+        </div>
+
         {/* Theme */}
         <div>
           <div className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground">

@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Tags,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import type { HighlightColor } from '@/lib/types';
 
@@ -41,6 +43,8 @@ export function ReaderToolbar({
 }: ReaderToolbarProps) {
   const isHighlightsPanelOpen = useAppStore((s) => s.isHighlightsPanelOpen);
   const toggleHighlightsPanel = useAppStore((s) => s.toggleHighlightsPanel);
+  const isZenMode = useAppStore((s) => s.isZenMode);
+  const toggleZenMode = useAppStore((s) => s.toggleZenMode);
   const selectedColor = useAppStore((s) => s.selectedHighlightColor);
   const setSelectedColor = useAppStore((s) => s.setSelectedHighlightColor);
   const highlightCount = useHighlightCount(articleId);
@@ -111,6 +115,17 @@ export function ReaderToolbar({
           title="Edit tags & folder"
         >
           <Tags className="h-4 w-4" />
+        </Button>
+
+        {/* Zen mode toggle — hides annotation gutter for distraction-free reading */}
+        <Button
+          variant={isZenMode ? 'secondary' : 'ghost'}
+          size="icon"
+          className="h-8 w-8 hidden sm:flex"
+          onClick={toggleZenMode}
+          title={isZenMode ? 'Exit focus mode' : 'Focus mode'}
+        >
+          {isZenMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </Button>
 
         {/* Highlights panel toggle */}

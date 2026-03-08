@@ -9,7 +9,7 @@ import { HighlightPopup, HighlightContextPopup } from './highlight-popup';
 import { NoteModal } from './note-modal';
 import { AnnotationMarker, AddAnnotationButton } from './annotation-marker';
 import { Recommendations } from './recommendations';
-import { FONT_SIZES, LINE_HEIGHTS, CONTENT_WIDTHS, READER_THEMES } from '@/lib/constants';
+import { FONT_SIZES, LINE_HEIGHTS, CONTENT_WIDTHS, READER_THEMES, HIGHLIGHT_COLORS } from '@/lib/constants';
 import DOMPurify from 'dompurify';
 import type { Highlight, HighlightColor } from '@/lib/types';
 
@@ -18,9 +18,14 @@ interface ReaderContentProps {
   content: string;
   articleTags: string[];
   onScrollProgress: (progress: number) => void;
+  onScrollDirection?: (dir: 'up' | 'down') => void;
+  initialProgress?: number;
 }
 
-export function ReaderContent({ articleId, content, articleTags, onScrollProgress }: ReaderContentProps) {
+// Ordered color keys for keyboard shortcuts 1-5
+const HIGHLIGHT_COLOR_KEYS = Object.keys(HIGHLIGHT_COLORS) as HighlightColor[];
+
+export function ReaderContent({ articleId, content, articleTags, onScrollProgress, onScrollDirection, initialProgress }: ReaderContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -37,6 +42,8 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const [editingNewAnnotation, setEditingNewAnnotation] = useState<number | null>(null);
   const [newAnnotationText, setNewAnnotationText] = useState('');
   const newAnnotationRef = useRef<HTMLTextAreaElement>(null);
+  const hasScrolled = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
   const readerTheme = useAppStore((s) => s.readerTheme);
   const fontFamily = useAppStore((s) => s.fontFamily);
@@ -46,6 +53,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const selectedColor = useAppStore((s) => s.selectedHighlightColor);
   const setSelectedColor = useAppStore((s) => s.setSelectedHighlightColor);
   const tagColorMap = useAppStore((s) => s.tagColorMap);
+  const isZenMode = useAppStore((s) => s.isZenMode);
 
   const { user } = useAuth();
   const highlights = useHighlights(articleId);
@@ -112,6 +120,20 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     return () => ro.disconnect();
   }, [sanitizedContent, applyHighlights]);
 
+  // Restore scroll position when article opens (runs once after first content paint)
+  useEffect(() => {
+    if (hasScrolled.current || !initialProgress || initialProgress <= 0) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const timer = setTimeout(() => {
+      const { scrollHeight, clientHeight } = container;
+      container.scrollTop = (initialProgress / 100) * (scrollHeight - clientHeight);
+      hasScrolled.current = true;
+    }, 80);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProgress]); // intentionally omits sanitizedContent — only restore once
+
   // Focus new annotation textarea
   useEffect(() => {
     if (editingNewAnnotation !== null && newAnnotationRef.current) {
@@ -145,6 +167,15 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
         ? 100
         : Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
       onScrollProgress(progress);
+
+      // Notify parent of scroll direction for toolbar hide/show
+      if (onScrollDirection) {
+        const dir = scrollTop > lastScrollTopRef.current + 4 ? 'down'
+          : scrollTop < lastScrollTopRef.current - 4 ? 'up'
+          : null;
+        if (dir) onScrollDirection(dir);
+      }
+      lastScrollTopRef.current = scrollTop;
     };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
@@ -316,6 +347,46 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     [articleId, selectedText, selectionData, user]
   );
 
+  // Keyboard shortcuts: 1-5 highlight with that color, Escape dismisses popup
+  useEffect(() => {
+    if (!popupPosition) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (active?.tagName === 'TEXTAREA' || active?.tagName === 'INPUT') return;
+      if (e.key === 'Escape') {
+        window.getSelection()?.removeAllRanges();
+        setPopupPosition(null);
+        setSelectedText('');
+        setSelectionData(null);
+        return;
+      }
+      const digit = parseInt(e.key, 10);
+      if (digit >= 1 && digit <= 5) {
+        e.preventDefault();
+        handleCreateHighlight(HIGHLIGHT_COLOR_KEYS[digit - 1]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [popupPosition, handleCreateHighlight]);
+
+  // Undo: Cmd/Ctrl+Z removes the most recent highlight for this article
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== 'z') return;
+      const active = document.activeElement;
+      if (active?.tagName === 'TEXTAREA' || active?.tagName === 'INPUT') return;
+      if (!highlights || highlights.length === 0) return;
+      e.preventDefault();
+      const last = [...highlights].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )[0];
+      deleteHighlight(last.id);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [highlights]);
+
   // Handle clicking on existing highlights — show the context popup (recolor / note / delete)
   const handleContentClick = useCallback(
     (e: React.MouseEvent) => {
@@ -359,6 +430,13 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     }
   }, [highlights]);
 
+  const handleResumeClick = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !initialProgress) return;
+    const { scrollHeight, clientHeight } = container;
+    container.scrollTo({ top: (initialProgress / 100) * (scrollHeight - clientHeight), behavior: 'smooth' });
+  }, [initialProgress]);
+
   const themeStyles = READER_THEMES[readerTheme];
 
   // Build annotation map by paragraphIndex
@@ -375,12 +453,24 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       className="flex-1 overflow-y-auto custom-scrollbar"
       style={{ backgroundColor: themeStyles.bg, color: themeStyles.text, overscrollBehavior: 'contain' }}
     >
+      {/* Resume chip — shown when article was partially read */}
+      {initialProgress && initialProgress > 5 && initialProgress < 98 && (
+        <div className="sticky top-3 z-20 flex justify-center pointer-events-none">
+          <button
+            onClick={handleResumeClick}
+            className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 active:scale-95 transition-all animate-in fade-in slide-in-from-top-2"
+          >
+            Resume — {initialProgress}%
+          </button>
+        </div>
+      )}
+
       <div
         className="mx-auto px-6 py-8 flex"
         style={{ maxWidth: `calc(${CONTENT_WIDTHS[contentWidth].maxWidth} + 3rem)` }}
       >
-        {/* Annotation gutter */}
-        <div ref={gutterRef} className="w-10 flex-shrink-0 relative hidden md:block">
+        {/* Annotation gutter — hidden in zen mode */}
+        <div ref={gutterRef} className={`w-10 flex-shrink-0 relative hidden md:block transition-opacity duration-300 ${isZenMode ? 'opacity-0 pointer-events-none' : ''}`}>
           {paragraphTops.map((top, i) => {
             const existing = annotationMap.get(i);
             if (existing) {

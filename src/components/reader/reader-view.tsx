@@ -26,6 +26,12 @@ export function ReaderView() {
   const progressRef = useRef(0);
   const [displayProgress, setDisplayProgress] = useState(0);
 
+  // Toolbar hide-on-scroll state
+  const [toolbarVisible, setToolbarVisible] = useState(true);
+
+  // Swipe navigation refs
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
   // Get all non-archived articles for navigation
   const allArticles = useLiveQuery(async () => {
     return db.articles.filter((a) => !a.isArchived).sortBy('dateAdded');
@@ -55,6 +61,11 @@ export function ReaderView() {
     };
   }, [activeArticleId]);
 
+  // Always show toolbar when a new article opens
+  useEffect(() => {
+    setToolbarVisible(true);
+  }, [activeArticleId]);
+
   const handleClose = useCallback(() => {
     if (activeArticleId && progressRef.current > 0) {
       updateArticle(activeArticleId, { readProgress: progressRef.current });
@@ -69,6 +80,10 @@ export function ReaderView() {
     },
     []
   );
+
+  const handleScrollDirection = useCallback((dir: 'up' | 'down') => {
+    setToolbarVisible(dir === 'up');
+  }, []);
 
   const handlePrevArticle = useCallback(() => {
     if (hasPrev && allArticles) {
@@ -87,6 +102,30 @@ export function ReaderView() {
       setActiveArticleId(allArticles[currentIndex + 1].id);
     }
   }, [hasNext, allArticles, currentIndex, activeArticleId, setActiveArticleId]);
+
+  // Swipe to navigate (mobile)
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    // Don't navigate while text is selected
+    if (!window.getSelection()?.isCollapsed) {
+      touchStartRef.current = null;
+      return;
+    }
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartRef.current.x;
+    const dy = Math.abs(t.clientY - touchStartRef.current.y);
+    touchStartRef.current = null;
+
+    if (Math.abs(dx) > 60 && dy < 50) {
+      if (dx < 0) handleNextArticle(); // swipe left → next
+      else handlePrevArticle();        // swipe right → prev
+    }
+  }, [handleNextArticle, handlePrevArticle]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -120,19 +159,28 @@ export function ReaderView() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      <ReadingProgress progress={displayProgress} />
-
-      <ReaderToolbar
-        title={article.title}
-        url={article.url}
-        articleId={article.id}
-        onClose={handleClose}
-        onPrevArticle={handlePrevArticle}
-        onNextArticle={handleNextArticle}
-        hasPrev={hasPrev}
-        hasNext={hasNext}
-      />
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-background"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Toolbar wrapper — slides up on scroll-down, back on scroll-up */}
+      <div
+        className="flex-shrink-0 transition-transform duration-200 ease-in-out"
+        style={{ transform: toolbarVisible ? 'translateY(0)' : 'translateY(-100%)' }}
+      >
+        <ReadingProgress progress={displayProgress} />
+        <ReaderToolbar
+          title={article.title}
+          url={article.url}
+          articleId={article.id}
+          onClose={handleClose}
+          onPrevArticle={handlePrevArticle}
+          onNextArticle={handleNextArticle}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
+        />
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Article content */}
@@ -141,6 +189,8 @@ export function ReaderView() {
           content={article.content}
           articleTags={article.tags}
           onScrollProgress={handleScrollProgress}
+          onScrollDirection={handleScrollDirection}
+          initialProgress={article.readProgress}
         />
 
         {/* Highlights panel */}
