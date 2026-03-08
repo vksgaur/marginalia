@@ -39,9 +39,11 @@ export function HighlightPopup({ x, y, mobile, onSelectColor, onDismiss, activeC
     };
   }, [onDismiss]);
 
+  // Always use `fixed` positioning so coordinates are always relative to the
+  // viewport regardless of scroll position or DOM structure.
   // On mobile: fixed bar at the bottom of the screen, away from the iOS native
   // "Copy / Look Up" callout which occupies the space above the selection.
-  // On desktop: float above the selection as usual.
+  // On desktop: float above the selection using viewport coordinates.
   const positionStyle = mobile
     ? { left: '50%', transform: 'translateX(-50%)', bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }
     : { left: `${x}px`, top: `${y}px`, transform: 'translate(-50%, -100%)' };
@@ -49,7 +51,7 @@ export function HighlightPopup({ x, y, mobile, onSelectColor, onDismiss, activeC
   return (
     <div
       ref={ref}
-      className={`${mobile ? 'fixed' : 'absolute'} z-50 flex items-center gap-1.5 bg-popover border border-border rounded-lg shadow-xl px-2.5 py-2 animate-in fade-in zoom-in-95`}
+      className="fixed z-50 flex items-center gap-1.5 bg-popover border border-border rounded-lg shadow-xl px-2.5 py-2 animate-in fade-in zoom-in-95"
       style={positionStyle}
     >
       {(Object.keys(HIGHLIGHT_COLORS) as HighlightColor[]).map((color) => (

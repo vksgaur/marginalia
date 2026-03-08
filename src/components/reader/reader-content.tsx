@@ -223,22 +223,20 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     // Position the popup.
     // On touch devices: use a fixed bar at the bottom of the screen so it doesn't
     // overlap the iOS native "Copy / Look Up" callout that appears above the selection.
-    // On desktop: float it above the selection as before.
+    // On desktop: use fixed viewport coordinates — the outer ReaderView div is
+    // `fixed inset-0`, so viewport coords map 1-to-1 with the absolute/fixed offsets.
+    // Do NOT add scrollTop: getBoundingClientRect() already returns viewport coords,
+    // and adding scrollTop caused the popup to drift down as the user scrolled.
     const isTouchDevice = 'ontouchstart' in window;
     if (isTouchDevice) {
       setPopupPosition({ x: 0, y: 0, mobile: true });
     } else {
       const rect = range.getBoundingClientRect();
-      const container = scrollContainerRef.current;
-      const containerRect = container?.getBoundingClientRect();
-      if (containerRect && container) {
-        const scrollTop = container.scrollTop;
-        setPopupPosition({
-          x: rect.left + rect.width / 2 - containerRect.left,
-          y: rect.top - containerRect.top - 10 + scrollTop,
-          mobile: false,
-        });
-      }
+      setPopupPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 10,
+        mobile: false,
+      });
     }
 
     setSelectedText(text);
