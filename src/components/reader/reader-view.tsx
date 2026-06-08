@@ -41,16 +41,24 @@ export function ReaderView() {
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && allArticles ? currentIndex < allArticles.length - 1 : false;
 
-  // Start reading session
+  // Start reading session — keyed ONLY on the article id so it fires once per open.
+  //
+  // Previously this also depended on the full `article` object. That created an
+  // infinite loop: markAsRead() rewrites lastReadAt/lastModified in IndexedDB →
+  // useArticle()'s useLiveQuery emits a brand-new `article` object → this effect
+  // re-runs → markAsRead() fires again → … forever. The runaway loop hammered
+  // IndexedDB and Firestore with writes and re-rendered nonstop, which pegged the
+  // CPU (phone heats up, battery drains) and eventually crashed the tab after a
+  // few minutes of reading. We don't need the loaded article here — both
+  // startSession() and markAsRead() operate purely by id.
   useEffect(() => {
-    if (activeArticleId && article) {
-      startSession();
-      markAsRead(activeArticleId);
-      return () => {
-        endSession();
-      };
-    }
-  }, [activeArticleId, article, startSession, endSession]);
+    if (!activeArticleId) return;
+    startSession();
+    markAsRead(activeArticleId);
+    return () => {
+      endSession();
+    };
+  }, [activeArticleId, startSession, endSession]);
 
   // Save progress on unmount
   useEffect(() => {
@@ -161,6 +169,7 @@ export function ReaderView() {
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-background"
+      style={{ overscrollBehavior: 'none', touchAction: 'manipulation' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >

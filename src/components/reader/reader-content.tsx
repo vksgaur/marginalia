@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo, memo } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useHighlights, addHighlight, updateHighlight, deleteHighlight } from '@/lib/hooks/use-highlights';
 import { useAnnotations, addAnnotation } from '@/lib/hooks/use-annotations';
@@ -25,7 +25,7 @@ interface ReaderContentProps {
 // Ordered color keys for keyboard shortcuts 1-5
 const HIGHLIGHT_COLOR_KEYS = Object.keys(HIGHLIGHT_COLORS) as HighlightColor[];
 
-export function ReaderContent({ articleId, content, articleTags, onScrollProgress, onScrollDirection, initialProgress }: ReaderContentProps) {
+function ReaderContentImpl({ articleId, content, articleTags, onScrollProgress, onScrollDirection, initialProgress }: ReaderContentProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -59,8 +59,11 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
   const highlights = useHighlights(articleId);
   const annotations = useAnnotations(articleId);
 
-  // Sanitize content
-  const sanitizedContent = DOMPurify.sanitize(content);
+  // Sanitize content — memoized so DOMPurify (which parses the whole article into
+  // a DOM tree) only runs when the content actually changes. Without this it re-ran
+  // on every render, including the frequent scroll-driven re-renders, burning CPU
+  // and churning memory on long articles.
+  const sanitizedContent = useMemo(() => DOMPurify.sanitize(content), [content]);
 
   // Apply highlights to content
   const applyHighlights = useCallback(() => {
@@ -101,23 +104,27 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     applyHighlights();
 
     // Measure paragraph positions for annotation gutter.
-    // Must also re-run after images load (ResizeObserver fires on layout shifts).
+    // Debounced to avoid excessive reflows when images load or layout shifts.
     const el = contentRef.current;
+    let measureTimer: ReturnType<typeof setTimeout>;
     const measureParagraphTops = () => {
-      if (!el) return;
-      const paragraphs = el.querySelectorAll(
-        'p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, figcaption'
-      );
-      const contentTop = el.offsetTop;
-      const tops = Array.from(paragraphs).map((p) => (p as HTMLElement).offsetTop - contentTop);
-      setParagraphTops(tops);
+      clearTimeout(measureTimer);
+      measureTimer = setTimeout(() => {
+        if (!el) return;
+        const paragraphs = el.querySelectorAll(
+          'p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th, figcaption'
+        );
+        const contentTop = el.offsetTop;
+        const tops = Array.from(paragraphs).map((p) => (p as HTMLElement).offsetTop - contentTop);
+        setParagraphTops(tops);
+      }, 150);
     };
 
     measureParagraphTops();
 
     const ro = new ResizeObserver(measureParagraphTops);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); clearTimeout(measureTimer); };
   }, [sanitizedContent, applyHighlights]);
 
   // Restore scroll position when article opens (runs once after first content paint)
@@ -156,31 +163,36 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     setEditingNewAnnotation(null);
   };
 
-  // Handle scroll progress
+  // Handle scroll progress — throttled with rAF to avoid running on every pixel
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    let rafId = 0;
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const progress = scrollHeight <= clientHeight
-        ? 100
-        : Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
-      onScrollProgress(progress);
+      if (rafId) return; // already scheduled
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        const progress = scrollHeight <= clientHeight
+          ? 100
+          : Math.round((scrollTop / (scrollHeight - clientHeight)) * 100);
+        onScrollProgress(progress);
 
-      // Notify parent of scroll direction for toolbar hide/show
-      if (onScrollDirection) {
-        const dir = scrollTop > lastScrollTopRef.current + 4 ? 'down'
-          : scrollTop < lastScrollTopRef.current - 4 ? 'up'
-          : null;
-        if (dir) onScrollDirection(dir);
-      }
-      lastScrollTopRef.current = scrollTop;
+        // Notify parent of scroll direction for toolbar hide/show
+        if (onScrollDirection) {
+          const dir = scrollTop > lastScrollTopRef.current + 4 ? 'down'
+            : scrollTop < lastScrollTopRef.current - 4 ? 'up'
+            : null;
+          if (dir) onScrollDirection(dir);
+        }
+        lastScrollTopRef.current = scrollTop;
+      });
     };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [onScrollProgress]);
+    return () => { container.removeEventListener('scroll', handleScroll); cancelAnimationFrame(rafId); };
+  }, [onScrollProgress, onScrollDirection]);
 
   // Core selection handler — safe to call from any event (mouseup, touchend, selectionchange).
   // Idempotent: calling it twice with the same live selection just re-renders the same popup.
@@ -308,10 +320,11 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     };
 
     // selectionchange debounce: catches handle-drag adjustments and desktop mouse drag.
+    // 400ms keeps CPU usage low on mobile while still feeling responsive.
     let scTimer: ReturnType<typeof setTimeout>;
     const onSelectionChange = () => {
       clearTimeout(scTimer);
-      scTimer = setTimeout(handleMouseUp, 200);
+      scTimer = setTimeout(handleMouseUp, 400);
     };
 
     document.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -439,13 +452,14 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
 
   const themeStyles = READER_THEMES[readerTheme];
 
-  // Build annotation map by paragraphIndex
-  const annotationMap = new Map<number, typeof annotations extends (infer T)[] | undefined ? T : never>();
-  if (annotations) {
-    for (const a of annotations) {
-      annotationMap.set(a.paragraphIndex, a);
+  // Build annotation map by paragraphIndex (memoized to avoid rebuilding each render)
+  const annotationMap = useMemo(() => {
+    const map = new Map<number, typeof annotations extends (infer T)[] | undefined ? T : never>();
+    if (annotations) {
+      for (const a of annotations) map.set(a.paragraphIndex, a);
     }
-  }
+    return map;
+  }, [annotations]);
 
   return (
     <div
@@ -454,7 +468,7 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
       style={{ backgroundColor: themeStyles.bg, color: themeStyles.text, overscrollBehavior: 'contain' }}
     >
       {/* Resume chip — shown when article was partially read */}
-      {initialProgress && initialProgress > 5 && initialProgress < 98 && (
+      {!!initialProgress && initialProgress > 5 && initialProgress < 98 && (
         <div className="sticky top-3 z-20 flex justify-center pointer-events-none">
           <button
             onClick={handleResumeClick}
@@ -582,6 +596,12 @@ export function ReaderContent({ articleId, content, articleTags, onScrollProgres
     </div>
   );
 }
+
+// Memoized: the parent ReaderView re-renders on scroll (progress bar + toolbar
+// show/hide state). All of this component's props are referentially stable during
+// reading, so memo() prevents those scroll-driven re-renders from re-running the
+// heavy content/highlight work here.
+export const ReaderContent = memo(ReaderContentImpl);
 
 function applyHighlightToElement(element: Element, highlight: Highlight) {
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
