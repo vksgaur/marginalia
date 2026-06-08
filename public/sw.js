@@ -1,4 +1,5 @@
-const CACHE = 'marginalia-v1';
+const CACHE = 'marginalia-v2';
+const MAX_CACHE_ENTRIES = 80;
 
 // Cache the app shell so it loads instantly (and offline) after first visit.
 self.addEventListener('install', (e) => {
@@ -16,6 +17,16 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Trim cache to prevent unbounded memory growth (iOS PWA has ~80-120MB limit).
+async function trimCache() {
+  const cache = await caches.open(CACHE);
+  const keys = await cache.keys();
+  if (keys.length > MAX_CACHE_ENTRIES) {
+    const toDelete = keys.slice(0, keys.length - MAX_CACHE_ENTRIES);
+    await Promise.all(toDelete.map((k) => cache.delete(k)));
+  }
+}
+
 self.addEventListener('fetch', (e) => {
   const { request } = e;
   const url = new URL(request.url);
@@ -29,7 +40,7 @@ self.addEventListener('fetch', (e) => {
       fetch(request)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(request, copy));
+          caches.open(CACHE).then((c) => { c.put(request, copy); trimCache(); });
           return res;
         })
         .catch(() => caches.match('/') ?? caches.match(request)),
@@ -51,7 +62,7 @@ self.addEventListener('fetch', (e) => {
         (cached) =>
           cached ??
           fetch(request).then((res) => {
-            if (res.ok) caches.open(CACHE).then((c) => c.put(request, res.clone()));
+            if (res.ok) caches.open(CACHE).then((c) => { c.put(request, res.clone()); trimCache(); });
             return res;
           }),
       ),

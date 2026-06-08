@@ -9,7 +9,6 @@ import { ArticleEditor } from './article-editor';
 import { Button } from '@/components/ui/button';
 import { HIGHLIGHT_COLORS } from '@/lib/constants';
 import {
-  ArrowLeft,
   Highlighter,
   ExternalLink,
   ChevronLeft,
@@ -17,6 +16,7 @@ import {
   Tags,
   Maximize2,
   Minimize2,
+  BookOpen,
 } from 'lucide-react';
 import type { HighlightColor } from '@/lib/types';
 
@@ -54,10 +54,19 @@ export function ReaderToolbar({
   return (
     <>
       <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 border-b border-border/50 bg-inherit">
-        {/* Back */}
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
-          <ArrowLeft className="h-4 w-4" />
+        {/* Home — Marginalia logo, navigates back to library */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0"
+          onClick={onClose}
+          title="Back to library"
+        >
+          <BookOpen className="h-4 w-4 text-primary" />
         </Button>
+
+        {/* Divider */}
+        <div className="hidden sm:block h-5 w-px bg-border/50" />
 
         {/* Navigation — hidden on mobile */}
         <div className="hidden sm:flex items-center gap-1">

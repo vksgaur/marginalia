@@ -121,6 +121,10 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Prevent iOS pull-to-refresh and overscroll bouncing in PWA standalone mode */
+  html {
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground;
   }
